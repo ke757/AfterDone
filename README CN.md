@@ -1,8 +1,12 @@
 # RigYourGoal
-The sidecar of harness agents. Persistently solidify with "goal".
+为Harness Agent打造的Sidecar工具。以“目标”为指引，持续巩固。
 
+## 理念
+- 目标持久化：本项目以目标的持久化而不是达成作为核心理念。区别于传统的——workflow + skills + agent的任务最大化设计。本项目追求agent -> skill -> workflow的可逆过程。要求最终可以将绝大部分模块做固化；
+- 产品经理：简单来说本项目就是一个面对用户的产品经理，外部Harmess Agent是我的skills generator；将探索、达成交给其他Harness Agents，内部的Sidecar Agent专注于目标优化与管理；
+- 保持上下文干净：按“目标”分离workspace，让model专注于他的“作品”；
 
-## st
+## 项目结构
 ```
 RigYourGoal/
 ├── src/                    # 前端源码

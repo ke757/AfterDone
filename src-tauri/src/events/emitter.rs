@@ -1,0 +1,82 @@
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter};
+
+use crate::events::types::*;
+
+/// Typed event bridge wrapping Tauri's AppHandle.
+/// This is the ONLY component that knows about Tauri's event system.
+/// All other modules emit events through this abstraction.
+#[derive(Clone)]
+pub struct EventBridge {
+    app: Arc<AppHandle>,
+}
+
+impl EventBridge {
+    pub fn new(app: AppHandle) -> Self {
+        Self {
+            app: Arc::new(app),
+        }
+    }
+
+    pub fn emit_agent_stream(&self, goal_id: &str, delta: &str, finished: bool) {
+        let event = format!("ryg:agent:stream:{}", goal_id);
+        let _ = self.app.emit(&event, AgentStreamPayload {
+            delta: delta.to_string(),
+            finished,
+        });
+    }
+
+    pub fn emit_agent_status(&self, goal_id: &str, agent_type: &str, status: &str, phase: &str) {
+        let event = format!("ryg:agent:status:{}", goal_id);
+        let _ = self.app.emit(&event, AgentStatusPayload {
+            agent_type: agent_type.to_string(),
+            status: status.to_string(),
+            phase: phase.to_string(),
+        });
+    }
+
+    pub fn emit_agent_decision(
+        &self,
+        goal_id: &str,
+        decision: &str,
+        reasoning: &str,
+        data: Option<serde_json::Value>,
+    ) {
+        let event = format!("ryg:agent:decision:{}", goal_id);
+        let _ = self.app.emit(&event, AgentDecisionPayload {
+            decision: decision.to_string(),
+            reasoning: reasoning.to_string(),
+            data,
+        });
+    }
+
+    pub fn emit_goal_status(&self, goal_id: &str, status: &str, previous: &str) {
+        let event = format!("ryg:goal:status:{}", goal_id);
+        let _ = self.app.emit(&event, GoalStatusPayload {
+            status: status.to_string(),
+            previous: previous.to_string(),
+        });
+    }
+
+    pub fn emit_milestone_status(&self, milestone_id: &str, status: &str, previous: &str) {
+        let event = format!("ryg:milestone:status:{}", milestone_id);
+        let _ = self.app.emit(&event, MilestoneStatusPayload {
+            status: status.to_string(),
+            previous: previous.to_string(),
+        });
+    }
+
+    pub fn emit_skill_status(&self, skill_id: &str, status: &str) {
+        let event = format!("ryg:skill:status:{}", skill_id);
+        let _ = self.app.emit(&event, SkillStatusPayload {
+            status: status.to_string(),
+        });
+    }
+
+    pub fn emit_openclaw_connection(&self, connected: bool, url: &str) {
+        let _ = self.app.emit("ryg:openclaw:connection", OpenClawConnectionPayload {
+            connected,
+            url: url.to_string(),
+        });
+    }
+}
