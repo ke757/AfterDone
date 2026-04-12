@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "rig-your-goal",
+  "productName": "PinTheGoal",
   "version": "0.1.0",
-  "identifier": "com.keven.rig-your-goal",
+  "identifier": "com.keven.pin-the-goal",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "rig-your-goal",
+        "title": "PinTheGoal",
         "width": 800,
         "height": 600
       }
