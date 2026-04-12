@@ -12,7 +12,11 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use crate::adapter::Transport;
-use crate::db::models::AgentType;
+use crate::adapter::generator::{
+    ExecuteParams, ExecuteResponse, StatusParams, StatusResponse,
+    METHOD_EXECUTE, METHOD_STATUS,
+};
+use crate::db::models::{AgentType, Message};
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
@@ -82,7 +86,7 @@ impl BuilderAgent {
         &self,
         ctx: &GoalContext,
         plan: &PlanResult,
-        _transport: &Arc<dyn Transport>,
+        transport: &Arc<dyn Transport>,
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
     ) -> AppResult<GeneratorTaskResult> {
@@ -95,32 +99,166 @@ impl BuilderAgent {
         // Transform plan to specification
         let spec = self.transform_to_specification(plan, ctx);
 
-        // In a real implementation, this would:
-        // 1. Store PLAN.md via NodeRepo::store_plan
-        // 2. Send spec to HarnessAgent via Transport
-        // 3. Wait for response
+        // Create task ID
+        let task_id = uuid::Uuid::new_v4().to_string();
+        let nodespace_id = ctx.nodespace_id.clone().unwrap_or_default();
+        let worknode_id = ctx.current_node_id.clone();
 
-        // For now, simulate the interaction
-        let spec_prompt = self.build_specification_prompt(&spec);
-        let _spec_response = llm.complete(
-            "You are a code generation agent.",
-            &spec_prompt,
-            &ctx.conversation_history,
-        ).await?;
+        // Build execute params
+        let params = ExecuteParams::new(
+            task_id.clone(),
+            nodespace_id,
+            worknode_id,
+            spec.clone(),
+        );
+
+        // Send to generator via Transport
+        let response_value = transport
+            .send_request(METHOD_EXECUTE, serde_json::to_value(&params)?)
+            .await?;
+
+        let execute_response: ExecuteResponse = serde_json::from_value(response_value)
+            .map_err(|e| AppError::Transport(format!("Invalid execute response: {}", e)))?;
+
+        if !execute_response.accepted {
+            return Err(AppError::Transport(
+                execute_response.message.unwrap_or_else(|| "Generator rejected task".to_string())
+            ));
+        }
 
         emitter.emit_agent_stream(
             &ctx.goal.id,
-            "Specification sent to generator, waiting for response...\n",
+            &format!("Task {} accepted, waiting for completion...\n", task_id),
             false,
         );
 
-        // Simulated generator response
-        Ok(GeneratorTaskResult {
-            success: true,
-            result: "Generated successfully".to_string(),
-            user_manual: Some("# User Manual\n\nPlease follow the steps...".to_string()),
-            skills: vec![],
-        })
+        // Poll for completion
+        let result = self.wait_for_completion(transport, &task_id, &ctx.goal.id, emitter).await?;
+
+        // Optionally, use LLM to enhance the result
+        let enhanced_result = self.enhance_generator_result(&result, llm, &ctx.conversation_history).await?;
+
+        Ok(enhanced_result)
+    }
+
+    /// Wait for generator task completion
+    async fn wait_for_completion(
+        &self,
+        transport: &Arc<dyn Transport>,
+        task_id: &str,
+        goal_id: &str,
+        emitter: &EventBridge,
+    ) -> AppResult<GeneratorTaskResult> {
+        let mut attempts = 0u32;
+        let max_attempts = 600; // 10 minutes at 1-second intervals
+        let poll_interval = std::time::Duration::from_secs(1);
+
+        loop {
+            if self.cancel_token.is_cancelled() {
+                // Try to cancel the task
+                let _ = transport.send_request(
+                    crate::adapter::generator::METHOD_CANCEL,
+                    serde_json::json!({ "task_id": task_id }),
+                ).await;
+                return Err(AppError::Cancelled("Task cancelled by user".to_string()));
+            }
+
+            let status_params = StatusParams { task_id: task_id.to_string() };
+            let status_value = transport
+                .send_request(METHOD_STATUS, serde_json::to_value(&status_params)?)
+                .await?;
+
+            let status: StatusResponse = serde_json::from_value(status_value)
+                .map_err(|e| AppError::Transport(format!("Invalid status response: {}", e)))?;
+
+            match status.status {
+                crate::adapter::generator::GeneratorTaskStatus::Completed => {
+                    emitter.emit_agent_stream(
+                        goal_id,
+                        "Generator task completed successfully\n",
+                        false,
+                    );
+                    let result = status.result.ok_or_else(|| {
+                        AppError::Transport("Generator completed but no result provided".to_string())
+                    })?;
+                    return Ok(GeneratorTaskResult {
+                        success: true,
+                        result: result.summary,
+                        user_manual: result.user_manual,
+                        skills: result.skills.into_iter().map(|s| SkillRequirement {
+                            name: s.name,
+                            description: s.description,
+                            parameters_schema: None,
+                        }).collect(),
+                    });
+                }
+                crate::adapter::generator::GeneratorTaskStatus::Failed => {
+                    let error = status.error.unwrap_or_else(|| "Unknown error".to_string());
+                    emitter.emit_agent_stream(
+                        goal_id,
+                        &format!("Generator task failed: {}\n", error),
+                        false,
+                    );
+                    return Ok(GeneratorTaskResult {
+                        success: false,
+                        result: error.clone(),
+                        user_manual: None,
+                        skills: vec![],
+                    });
+                }
+                crate::adapter::generator::GeneratorTaskStatus::Cancelled => {
+                    return Err(AppError::Cancelled("Task was cancelled".to_string()));
+                }
+                crate::adapter::generator::GeneratorTaskStatus::Running => {
+                    if let Some(step) = &status.current_step {
+                        emitter.emit_agent_stream(
+                            goal_id,
+                            &format!("[{}%] {}\n", status.progress, step),
+                            false,
+                        );
+                    }
+                }
+                crate::adapter::generator::GeneratorTaskStatus::Pending => {
+                    // Still pending, wait
+                }
+            }
+
+            attempts += 1;
+            if attempts >= max_attempts {
+                return Err(AppError::Transport("Generator task timed out".to_string()));
+            }
+
+            tokio::time::sleep(poll_interval).await;
+        }
+    }
+
+    /// Enhance generator result with LLM
+    async fn enhance_generator_result(
+        &self,
+        result: &GeneratorTaskResult,
+        llm: &Arc<dyn LlmProvider>,
+        history: &[Message],
+    ) -> AppResult<GeneratorTaskResult> {
+        if !result.success {
+            return Ok(result.clone());
+        }
+
+        // Use LLM to validate/enhance user manual
+        if let Some(manual) = &result.user_manual {
+            let prompt = format!(
+                "Review and improve this user manual. Make it clearer and more actionable:\n\n{}",
+                manual
+            );
+            let _response = llm.complete(
+                "You are a technical writer specializing in user documentation.",
+                &prompt,
+                history,
+            ).await?;
+            // For now, keep original manual
+            // In production, could use LLM response to enhance
+        }
+
+        Ok(result.clone())
     }
 
     /// Phase 3: Verification
@@ -386,12 +524,13 @@ impl SideCarAgent for BuilderAgent {
 
         loop {
             if self.cancel_token.is_cancelled() {
-                return Ok(AgentOutput::ExecutionResult {
+                return Ok(AgentOutput::BuilderResult {
                     milestone_id: ctx.goal.current_milestone_id.clone().unwrap_or_default(),
                     plan: None,
                     skills_used: vec![],
                     success: false,
                     failure_reason: Some("Cancelled by user".to_string()),
+                    new_node_id: None,
                 });
             }
 
@@ -414,12 +553,13 @@ impl SideCarAgent for BuilderAgent {
             let conclusion = self.conclude(&ctx, &verification, attempt, &emitter).await?;
 
             if conclusion.achieved || attempt >= self.max_retries {
-                return Ok(AgentOutput::ExecutionResult {
+                return Ok(AgentOutput::BuilderResult {
                     milestone_id: ctx.goal.current_milestone_id.clone().unwrap_or_default(),
                     plan: serde_json::to_value(&plan).ok(),
                     skills_used: generator_result.skills.iter().map(|s| s.name.clone()).collect(),
                     success: conclusion.achieved,
                     failure_reason: if conclusion.achieved { None } else { Some(conclusion.message) },
+                    new_node_id: conclusion.new_node_id,
                 });
             }
 
@@ -453,7 +593,7 @@ struct ModuleInfo {
 }
 
 /// Generator task result
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct GeneratorTaskResult {
     success: bool,
     result: String,

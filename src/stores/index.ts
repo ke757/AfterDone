@@ -7,6 +7,12 @@ export { useMilestoneStore } from './milestoneStore';
 export { useChatStore, initChatListeners, cleanupChatListeners } from './chatStore';
 export { useSettingsStore } from './settingsStore';
 export { useAgentStore, initAgentListeners, cleanupAgentListeners } from './agentStore';
+export {
+  useNodeSpaceStore,
+  useWorkNodeStore,
+  buildWorkNodeTree,
+  getWorkNodeBugs,
+} from './noderepoStore';
 
 // 从各模块导入函数
 import { initChatListeners, cleanupChatListeners } from './chatStore';

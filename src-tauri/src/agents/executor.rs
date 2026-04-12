@@ -13,7 +13,7 @@ use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
 use crate::agents::traits::SideCarAgent;
-use crate::agents::types::{GoalContext, AgentOutput};
+use crate::agents::types::{GoalContext, AgentOutput, BugInfo};
 use crate::noderepo::{NodeRepo, BugEntry};
 
 /// Maximum execution iterations
@@ -309,6 +309,10 @@ impl SideCarAgent for ExecutorAgent {
             skills_used: ctx.available_skills.iter().map(|s| s.name.clone()).collect(),
             success: result.success,
             failure_reason: if result.success { None } else { Some(result.message) },
+            bugs_found: result.bugs.into_iter().map(|b| BugInfo {
+                description: b.description,
+                error_output: b.error_output,
+            }).collect(),
         })
     }
 

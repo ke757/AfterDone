@@ -197,6 +197,7 @@ impl OptimizerAgent {
                 solidified: generator_result.optimizations.is_empty(),
                 message: "Optimization successful".to_string(),
                 optimizations: generator_result.optimizations.clone(),
+                new_node_id: None, // Would be set by NodeRepo::node_achieved
             });
         }
 
@@ -212,6 +213,7 @@ impl OptimizerAgent {
                 solidified: false,
                 message: format!("Failed after {} attempts", self.max_retries),
                 optimizations: vec![],
+                new_node_id: None,
             });
         }
 
@@ -226,6 +228,7 @@ impl OptimizerAgent {
             solidified: false,
             message: "Retrying...".to_string(),
             optimizations: vec![],
+            new_node_id: None,
         })
     }
 
@@ -401,6 +404,7 @@ impl SideCarAgent for OptimizerAgent {
                     milestone_id: ctx.goal.current_milestone_id.clone().unwrap_or_default(),
                     optimizations: vec![],
                     solidified: false,
+                    new_node_id: None,
                 });
             }
 
@@ -417,6 +421,7 @@ impl SideCarAgent for OptimizerAgent {
                     milestone_id: ctx.goal.current_milestone_id.clone().unwrap_or_default(),
                     optimizations: vec![],
                     solidified: true,
+                    new_node_id: None,
                 });
             }
 
@@ -446,6 +451,7 @@ impl SideCarAgent for OptimizerAgent {
                     milestone_id: ctx.goal.current_milestone_id.clone().unwrap_or_default(),
                     optimizations: conclusion.optimizations,
                     solidified: conclusion.solidified,
+                    new_node_id: conclusion.new_node_id,
                 });
             }
 
@@ -497,4 +503,5 @@ struct ConclusionResult {
     solidified: bool,
     message: String,
     optimizations: Vec<Optimization>,
+    new_node_id: Option<String>,
 }

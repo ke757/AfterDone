@@ -1,13 +1,13 @@
 # RigYourGoal
-为Harness Agent打造的Sidecar工具。以“目标”为指引，持续巩固。
+为 Harness Agent 打造的 Sidecar 工作台，用于工具构建。以“目标”为指引，持续巩固。
 
 ## 理念
-- 目标持久化：本项目以目标的持久化而不是达成作为核心理念。区别于传统的——workflow + skills + agent的任务最大化设计。本项目追求agent -> skill -> workflow的可逆过程。要求最终可以将绝大部分模块做固化；
-- 产品经理：简单来说本项目就是一个面对用户的产品经理，外部Harmess Agent是我的skills generator；将探索、达成交给其他Harness Agents，内部的Sidecar Agent专注于目标优化与管理；
+- 目标持久化：本项目以目标的持久化而不是达成作为核心理念。区别于传统的`workflow + skills + agent`的任务最大化设计。本项目追求`agent -> skill -> workflow`的可逆过程。要求最终可以将绝大部分模块做固化；
+- 产品经理：简单来说本项目就是一个面对用户的产品经理，外部 Harmess Agent 是项目的 skills generator；将探索、达成交给其他 Harness Agents，内部的 Sidecar Agent 专注于目标优化与管理；
 - 保持上下文干净：按“目标”分离workspace，让model专注于他的“作品”；
 
 ## 项目结构
-```
+```text
 RigYourGoal/
 ├── src/                    # 前端源码
 │   ├── types/              # TypeScript 类型
@@ -20,7 +20,7 @@ RigYourGoal/
     ├── src/
     │   ├── config/         # 配置模块
     │   ├── db/             # 数据库层
-    │   ├── comm/           # 通信层
+    │   ├── adapter/        # 通信层
     │   ├── llm/            # LLM 提供者
     │   ├── agents/         # Agent 系统
     │   ├── events/         # 事件系统
@@ -28,3 +28,6 @@ RigYourGoal/
     │   └── state/          # 应用状态
     └── migrations/         # SQL 迁移
 ```
+
+## 关于项目
+正在迭代中，敬请期待！

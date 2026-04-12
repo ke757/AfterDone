@@ -2,7 +2,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::agents::summarizer::GoalSummarizerAgent;
+use crate::agents::GoalSummarizerAgent;
+use crate::agents::BuilderAgent;
+use crate::agents::ExecutorAgent;
+use crate::agents::OptimizerAgent;
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{AgentOutput, AgentStatus, AgentTaskHandle, GoalContext};
 use crate::adapter::Transport;
@@ -11,6 +14,7 @@ use crate::db::{DatabasePool, GoalsRepo, MessagesRepo, SkillsRepo, MilestonesRep
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
+use crate::noderepo::NodeRepo;
 
 /// The AgentSupervisor is the central coordinator.
 /// It owns the lifecycle of all agent tasks and manages phase transitions.
@@ -57,15 +61,15 @@ impl AgentSupervisor {
         let cancel_token = tokio_util::sync::CancellationToken::new();
         let goal_id_owned = goal_id.to_string();
 
-        // Build goal context from DB
+        // Build goal context from DB (includes NodeSpace info)
         let ctx = self.build_goal_context(&goal).await?;
 
         // Create the appropriate agent
         let agent: Box<dyn SideCarAgent> = match agent_type {
             AgentType::Summarizer => Box::new(GoalSummarizerAgent::new(cancel_token.clone())),
-            _ => return Err(AppError::Agent(format!(
-                "Agent type {} not yet implemented", agent_type
-            ))),
+            AgentType::Builder => Box::new(BuilderAgent::new(cancel_token.clone())),
+            AgentType::Executor => Box::new(ExecutorAgent::new(cancel_token.clone())),
+            AgentType::Optimizer => Box::new(OptimizerAgent::new(cancel_token.clone())),
         };
 
         // Register the task handle
@@ -83,6 +87,7 @@ impl AgentSupervisor {
         // Update goal status
         let new_status = match agent_type {
             AgentType::Summarizer => "summarizing",
+            AgentType::Builder => "building",
             AgentType::Executor => "executing",
             AgentType::Optimizer => "optimizing",
         };
@@ -113,10 +118,15 @@ impl AgentSupervisor {
                 Ok(output) => {
                     if let Err(e) = handle_agent_output(&db, &goal_id_owned, &output, &emitter).await {
                         tracing::error!("Failed to handle agent output: {}", e);
-                    }
-                    let mut tasks_guard = tasks.write().await;
-                    if let Some(h) = tasks_guard.get_mut(&goal_id_owned) {
-                        h.status = AgentStatus::Completed;
+                        let mut tasks_guard = tasks.write().await;
+                        if let Some(h) = tasks_guard.get_mut(&goal_id_owned) {
+                            h.status = AgentStatus::Failed;
+                        }
+                    } else {
+                        let mut tasks_guard = tasks.write().await;
+                        if let Some(h) = tasks_guard.get_mut(&goal_id_owned) {
+                            h.status = AgentStatus::Completed;
+                        }
                     }
                 }
                 Err(e) => {
@@ -153,6 +163,15 @@ impl AgentSupervisor {
         tasks.get(goal_id).map(|h| h.status.clone())
     }
 
+    /// Get all running agents
+    pub async fn list_running(&self) -> Vec<(String, AgentType, AgentStatus)> {
+        let tasks = self.tasks.read().await;
+        tasks.iter()
+            .filter(|(_, h)| h.status == AgentStatus::Running || h.status == AgentStatus::Starting)
+            .map(|(id, h)| (id.clone(), h.agent_type.clone(), h.status.clone()))
+            .collect()
+    }
+
     /// Build the GoalContext from the database
     async fn build_goal_context(&self, goal: &crate::db::models::Goal) -> AppResult<GoalContext> {
         let current_milestone = match &goal.current_milestone_id {
@@ -173,6 +192,13 @@ impl AgentSupervisor {
 
         let agent_logs = AgentLogsRepo::list_by_goal(&self.db, &goal.id).await?;
 
+        // Get NodeSpace info
+        let nodespace = NodeRepo::get_nodespace_by_goal(&self.db, &goal.id).await?;
+        let (nodespace_id, current_node_id) = match nodespace {
+            Some(ns) => (Some(ns.id), ns.current_node_id),
+            None => (None, None),
+        };
+
         Ok(GoalContext {
             goal: goal.clone(),
             current_milestone,
@@ -180,6 +206,8 @@ impl AgentSupervisor {
             available_skills,
             agent_logs,
             metadata: HashMap::new(),
+            nodespace_id,
+            current_node_id,
         })
     }
 }
@@ -188,9 +216,11 @@ impl AgentSupervisor {
 fn determine_agent_type(goal_status: &str) -> AppResult<AgentType> {
     match goal_status {
         "draft" => Ok(AgentType::Summarizer),
-        "pinned" => Ok(AgentType::Executor),
-        "achieved" => Ok(AgentType::Optimizer),
-        "failed" => Ok(AgentType::Executor), // Retry execution
+        "pinned" => Ok(AgentType::Builder),      // Builder for initial achievement
+        "building" => Ok(AgentType::Builder),    // Resume building
+        "achieved" => Ok(AgentType::Optimizer),  // Optimize after achievement
+        "optimizing" => Ok(AgentType::Optimizer),// Resume optimization
+        "failed" => Ok(AgentType::Builder),      // Retry with Builder
         s => Err(AppError::Agent(format!(
             "No agent transition defined for goal status: {}", s
         ))),
@@ -222,18 +252,14 @@ async fn handle_agent_output(
             });
             let summary_str = serde_json::to_string_pretty(&summary_json)?;
 
-            let goal = GoalsRepo::update_summary(db, goal_id, &summary_str).await?;
+            let _goal = GoalsRepo::update_summary(db, goal_id, &summary_str).await?;
             let _ = GoalsRepo::update(db, goal_id, crate::db::models::UpdateGoalInput {
                 title: Some(title.clone()),
                 summary: None,
                 raw_input: None,
             }).await;
 
-            // Transition to summarizing -> draft (waiting for user to pin)
-            // Actually after summarizing, go back to "draft" so user can review and pin
-            // Wait — the flow is: draft → summarizing → (summary ready, user reviews) → pinned
-            // After summarizer completes, the goal status should transition to indicate "summary ready"
-            // We use "draft" with a summary now available for the user to pin
+            // Transition back to draft so user can review and pin
             GoalsRepo::update_status(db, goal_id, "draft").await?;
             emitter.emit_goal_status(goal_id, "draft", "summarizing");
 
@@ -244,10 +270,50 @@ async fn handle_agent_output(
             ).await?;
         }
 
+        AgentOutput::BuilderResult {
+            milestone_id,
+            success,
+            failure_reason,
+            new_node_id,
+            skills_used,
+            ..
+        } => {
+            if *success {
+                // Goal achieved
+                GoalsRepo::update_status(db, goal_id, "achieved").await?;
+                emitter.emit_goal_status(goal_id, "achieved", "building");
+
+                // Update milestone status
+                if !milestone_id.is_empty() {
+                    MilestonesRepo::update_status(db, milestone_id, "completed").await?;
+                    emitter.emit_milestone_status(milestone_id, "completed", "in_progress");
+                }
+
+                // Log the achievement
+                AgentLogsRepo::append(
+                    db, goal_id, "builder", "building", "achieved",
+                    Some(&serde_json::json!({
+                        "new_node_id": new_node_id,
+                        "skills_used": skills_used,
+                    }).to_string()),
+                ).await?;
+            } else {
+                GoalsRepo::update_status(db, goal_id, "failed").await?;
+                emitter.emit_goal_status(goal_id, "failed", "building");
+
+                // Log the failure
+                AgentLogsRepo::append(
+                    db, goal_id, "builder", "building", "failed",
+                    failure_reason.as_ref().map(|s| s.as_str()),
+                ).await?;
+            }
+        }
+
         AgentOutput::ExecutionResult {
             milestone_id,
             success,
             failure_reason,
+            bugs_found,
             ..
         } => {
             if *success {
@@ -256,6 +322,12 @@ async fn handle_agent_output(
             } else {
                 GoalsRepo::update_status(db, goal_id, "failed").await?;
                 emitter.emit_goal_status(goal_id, "failed", "executing");
+
+                // If we have a current node, persist bugs
+                if !bugs_found.is_empty() {
+                    // In real implementation: use NodeRepo::add_node_bug for each bug
+                    tracing::info!("Execution found {} bugs", bugs_found.len());
+                }
             }
 
             if !milestone_id.is_empty() {
@@ -268,7 +340,8 @@ async fn handle_agent_output(
         AgentOutput::OptimizationResult {
             milestone_id,
             solidified,
-            ..
+            optimizations,
+            new_node_id,
         } => {
             if *solidified {
                 GoalsRepo::update_status(db, goal_id, "solidified").await?;
@@ -282,6 +355,16 @@ async fn handle_agent_output(
                 MilestonesRepo::update_status(db, milestone_id, "completed").await?;
                 emitter.emit_milestone_status(milestone_id, "completed", "in_progress");
             }
+
+            // Log the optimization
+            AgentLogsRepo::append(
+                db, goal_id, "optimizer", "optimizing", "completed",
+                Some(&serde_json::json!({
+                    "solidified": solidified,
+                    "optimizations": optimizations.len(),
+                    "new_node_id": new_node_id,
+                }).to_string()),
+            ).await?;
         }
     }
 

@@ -36,6 +36,9 @@ pub enum AppError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Cancelled: {0}")]
+    Cancelled(String),
 }
 
 impl From<toml::de::Error> for AppError {
@@ -73,6 +76,7 @@ impl Serialize for AppError {
             AppError::Serialization(_) => "serialization",
             AppError::Toml(_) => "toml",
             AppError::Internal(_) => "internal",
+            AppError::Cancelled(_) => "cancelled",
         };
 
         ErrorPayload {

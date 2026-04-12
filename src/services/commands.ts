@@ -9,6 +9,11 @@ import type { Skill, CreateSkillRequest } from '../types/skill';
 import type { Message } from '../types/chat';
 import type { OpenClawConfig, LlmConfig } from '../types/settings';
 import type { AgentStatus, AgentLog } from '../types/agent';
+import type {
+  NodeSpace,
+  WorkNode,
+  BugEntry,
+} from '../types/noderepo';
 
 // ============================================================================
 // Goal Commands
@@ -157,4 +162,98 @@ export async function updateLlmConfig(config: Partial<LlmConfig>): Promise<LlmCo
 
 export async function testLlmConnection(): Promise<boolean> {
   return invoke<boolean>('test_llm_connection');
+}
+
+// ============================================================================
+// NodeSpace Commands
+// ============================================================================
+
+export async function nodespaceInit(goalId: string): Promise<NodeSpace> {
+  return invoke<NodeSpace>('nodespace_init', { goal_id: goalId });
+}
+
+export async function nodespaceGet(goalId: string): Promise<NodeSpace | null> {
+  return invoke<NodeSpace | null>('nodespace_get', { goal_id: goalId });
+}
+
+export async function nodespaceGetOrCreate(goalId: string): Promise<NodeSpace> {
+  return invoke<NodeSpace>('nodespace_get_or_create', { goal_id: goalId });
+}
+
+export async function nodespaceUpdatePlan(nodespaceId: string, content: string): Promise<void> {
+  return invoke('nodespace_update_plan', { nodespace_id: nodespaceId, content });
+}
+
+export async function nodespaceGetPlan(nodespaceId: string): Promise<string | null> {
+  return invoke<string | null>('nodespace_get_plan', { nodespace_id: nodespaceId });
+}
+
+// ============================================================================
+// WorkNode Commands
+// ============================================================================
+
+export async function worknodeCreateInitial(
+  nodespaceId: string,
+  milestoneId?: string
+): Promise<WorkNode> {
+  return invoke<WorkNode>('worknode_create_initial', { 
+    nodespace_id: nodespaceId, 
+    milestone_id: milestoneId 
+  });
+}
+
+export async function worknodeGetCurrent(nodespaceId: string): Promise<WorkNode | null> {
+  return invoke<WorkNode | null>('worknode_get_current', { nodespace_id: nodespaceId });
+}
+
+export async function worknodeGet(nodeId: string): Promise<WorkNode | null> {
+  return invoke<WorkNode | null>('worknode_get', { node_id: nodeId });
+}
+
+export async function worknodeList(nodespaceId: string): Promise<WorkNode[]> {
+  return invoke<WorkNode[]>('worknode_list', { nodespace_id: nodespaceId });
+}
+
+export async function worknodeGetBugs(nodeId: string): Promise<BugEntry[]> {
+  return invoke<BugEntry[]>('worknode_get_bugs', { node_id: nodeId });
+}
+
+export async function worknodeAddBug(
+  nodeId: string,
+  description: string,
+  errorOutput?: string
+): Promise<BugEntry> {
+  return invoke<BugEntry>('worknode_add_bug', { 
+    node_id: nodeId, 
+    description, 
+    error_output: errorOutput 
+  });
+}
+
+export async function worknodeGetConclusion(nodeId: string): Promise<string | null> {
+  return invoke<string | null>('worknode_get_conclusion', { node_id: nodeId });
+}
+
+export async function worknodeGetUserManual(nodeId: string): Promise<string | null> {
+  return invoke<string | null>('worknode_get_user_manual', { node_id: nodeId });
+}
+
+export async function worknodeGoalAchieved(
+  nodespaceId: string, 
+  conclusion: string
+): Promise<string> {
+  return invoke<string>('worknode_goal_achieved', { 
+    nodespace_id: nodespaceId, 
+    conclusion 
+  });
+}
+
+export async function worknodeAchieved(
+  parentNodeId: string, 
+  conclusion: string
+): Promise<string> {
+  return invoke<string>('worknode_achieved', { 
+    parent_node_id: parentNodeId, 
+    conclusion 
+  });
 }

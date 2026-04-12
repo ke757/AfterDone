@@ -30,5 +30,6 @@
     "tailwindcss": "^4.2.2",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
-  }
+  },
+  "author": {"name": "ke757", "email": "liuyuxiaokk@gmail.com"}
 }

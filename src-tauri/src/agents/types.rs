@@ -1,11 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::adapter::Transport;
 use crate::db::models::{AgentType, Goal, Message, Milestone, Skill, AgentLog};
-use crate::events::EventBridge;
-use crate::llm::LlmProvider;
-use std::sync::Arc;
 
 /// Context passed to any agent on each run.
 /// Constructed by AgentSupervisor from the database before spawning.
@@ -17,6 +13,10 @@ pub struct GoalContext {
     pub available_skills: Vec<Skill>,
     pub agent_logs: Vec<AgentLog>,
     pub metadata: HashMap<String, serde_json::Value>,
+    /// NodeSpace ID for the goal (if initialized)
+    pub nodespace_id: Option<String>,
+    /// Current WorkNode ID (if any)
+    pub current_node_id: Option<String>,
 }
 
 /// Output from an agent run
@@ -31,6 +31,16 @@ pub enum AgentOutput {
         constraints: Vec<String>,
         refinement_questions: Vec<String>,
     },
+    /// Output from the Builder agent (原型构建)
+    BuilderResult {
+        milestone_id: String,
+        plan: Option<serde_json::Value>,
+        skills_used: Vec<String>,
+        success: bool,
+        failure_reason: Option<String>,
+        /// New worknode created (if successful)
+        new_node_id: Option<String>,
+    },
     /// Output from the Executor agent
     ExecutionResult {
         milestone_id: String,
@@ -38,13 +48,24 @@ pub enum AgentOutput {
         skills_used: Vec<String>,
         success: bool,
         failure_reason: Option<String>,
+        /// Bugs found during execution
+        bugs_found: Vec<BugInfo>,
     },
     /// Output from the Optimizer agent
     OptimizationResult {
         milestone_id: String,
         optimizations: Vec<Optimization>,
         solidified: bool,
+        /// New worknode created (if successful)
+        new_node_id: Option<String>,
     },
+}
+
+/// Bug information from execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BugInfo {
+    pub description: String,
+    pub error_output: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

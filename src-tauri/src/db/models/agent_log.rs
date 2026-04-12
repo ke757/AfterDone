@@ -5,6 +5,7 @@ use sqlx::FromRow;
 #[serde(rename_all = "snake_case")]
 pub enum AgentType {
     Summarizer,
+    Builder,
     Executor,
     Optimizer,
 }
@@ -13,6 +14,7 @@ impl std::fmt::Display for AgentType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AgentType::Summarizer => write!(f, "summarizer"),
+            AgentType::Builder => write!(f, "builder"),
             AgentType::Executor => write!(f, "executor"),
             AgentType::Optimizer => write!(f, "optimizer"),
         }
@@ -24,6 +26,7 @@ impl TryFrom<&str> for AgentType {
     fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
         match s {
             "summarizer" => Ok(AgentType::Summarizer),
+            "builder" => Ok(AgentType::Builder),
             "executor" => Ok(AgentType::Executor),
             "optimizer" => Ok(AgentType::Optimizer),
             _ => Err(format!("Unknown agent type: {}", s)),

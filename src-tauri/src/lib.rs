@@ -39,7 +39,9 @@ pub fn run() {
             let db = runtime.block_on(async { db::init_db(&db_path).await })
                 .expect("Failed to initialize database");
 
-            let state = AppState::new(db, config);
+            // Get app handle for EventBridge
+            let app_handle = app.handle().clone();
+            let state = AppState::new(db, config, app_handle);
             app.manage(state);
 
             tracing::info!("RigYourGoal initialized successfully");
@@ -62,6 +64,7 @@ pub fn run() {
             commands::agents::agents_start,
             commands::agents::agents_stop,
             commands::agents::agents_status,
+            commands::agents::agents_list_running,
             commands::config_cmd::config_get_openclaw,
             commands::config_cmd::config_set_openclaw,
             commands::config_cmd::config_get_llm,
@@ -70,6 +73,22 @@ pub fn run() {
             commands::config_cmd::config_test_llm,
             commands::chat::chat_send,
             commands::chat::chat_history,
+            // NodeSpace & WorkNode commands
+            commands::noderepo_cmd::nodespace_init,
+            commands::noderepo_cmd::nodespace_get,
+            commands::noderepo_cmd::nodespace_get_or_create,
+            commands::noderepo_cmd::nodespace_update_plan,
+            commands::noderepo_cmd::nodespace_get_plan,
+            commands::noderepo_cmd::worknode_create_initial,
+            commands::noderepo_cmd::worknode_get_current,
+            commands::noderepo_cmd::worknode_get,
+            commands::noderepo_cmd::worknode_list,
+            commands::noderepo_cmd::worknode_get_bugs,
+            commands::noderepo_cmd::worknode_add_bug,
+            commands::noderepo_cmd::worknode_get_conclusion,
+            commands::noderepo_cmd::worknode_get_user_manual,
+            commands::noderepo_cmd::worknode_goal_achieved,
+            commands::noderepo_cmd::worknode_achieved,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
