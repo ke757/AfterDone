@@ -1,12 +1,13 @@
 mod error;
 mod config;
 mod db;
-mod comm;
+mod adapter;
 mod llm;
 mod agents;
 mod events;
 mod state;
 mod commands;
+mod noderepo;
 
 use state::AppState;
 use tauri::Manager;

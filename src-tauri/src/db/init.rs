@@ -23,9 +23,14 @@ pub async fn init_db(database_path: &Path) -> AppResult<SqlitePool> {
 }
 
 async fn run_migrations(pool: &SqlitePool) -> AppResult<()> {
-    let migration_sql = include_str!("../../migrations/001_initial.sql");
+    let migration_001 = include_str!("../../migrations/001_initial.sql");
+    let migration_002 = include_str!("../../migrations/002_nodespace.sql");
 
-    sqlx::raw_sql(migration_sql)
+    sqlx::raw_sql(migration_001)
+        .execute(pool)
+        .await?;
+
+    sqlx::raw_sql(migration_002)
         .execute(pool)
         .await?;
 

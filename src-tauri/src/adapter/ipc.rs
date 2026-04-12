@@ -1,12 +1,12 @@
 use async_trait::async_trait;
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use serde_json::{json, Value};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 
-use crate::comm::frame::{GatewayEvent, GatewayResponse};
-use crate::comm::transport::{EventStream, Transport};
+use crate::adapter::frame::{GatewayEvent, GatewayResponse};
+use crate::adapter::transport::{EventStream, Transport};
 use crate::error::{AppError, AppResult};
 
 /// In-process IPC transport using tokio mpsc channels.

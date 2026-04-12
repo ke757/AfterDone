@@ -5,7 +5,7 @@ use tokio::sync::RwLock;
 use crate::agents::summarizer::GoalSummarizerAgent;
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{AgentOutput, AgentStatus, AgentTaskHandle, GoalContext};
-use crate::comm::Transport;
+use crate::adapter::Transport;
 use crate::db::models::AgentType;
 use crate::db::{DatabasePool, GoalsRepo, MessagesRepo, SkillsRepo, MilestonesRepo, AgentLogsRepo};
 use crate::error::{AppError, AppResult};

@@ -57,6 +57,7 @@ impl LlmProvider for RigProvider {
 impl RigProvider {
     /// Make an LLM call using rig-core.
     async fn call_rig(&self, system_prompt: &str, user_prompt: &str) -> AppResult<String> {
+        use rig::client::CompletionClient;  // Required for .agent() method in rig v0.33+
         use rig::completion::Prompt;
         use rig::providers::openai::Client;
 
@@ -64,8 +65,9 @@ impl RigProvider {
             return Err(AppError::Llm("API key not configured".to_string()));
         }
 
-        // Create OpenAI client
-        let client = Client::new(&self.config.api_key);
+        // Create OpenAI client (rig v0.33+ returns Result)
+        let client = Client::new(&self.config.api_key)
+            .map_err(|e| AppError::Llm(format!("Failed to create OpenAI client: {}", e)))?;
 
         // Build an agent with system prompt as preamble
         let agent = client.agent(&self.config.model)

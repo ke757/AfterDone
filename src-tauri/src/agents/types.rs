@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::comm::Transport;
+use crate::adapter::Transport;
 use crate::db::models::{AgentType, Goal, Message, Milestone, Skill, AgentLog};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;

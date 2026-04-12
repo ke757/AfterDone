@@ -3,7 +3,7 @@ use futures::Stream;
 use serde_json::Value;
 use std::pin::Pin;
 
-use crate::comm::frame::GatewayEvent;
+use crate::adapter::frame::GatewayEvent;
 use crate::error::AppResult;
 
 /// Transport trait: the pluggable communication seam.
