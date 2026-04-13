@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    rig_your_goal_lib::run()
+    after_done_lib::run()
 }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "PinTheGoal",
+  "productName": "AfterDone",
   "version": "0.1.0",
-  "identifier": "com.keven.pin-the-goal",
+  "identifier": "com.keven.after-done",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "PinTheGoal",
+        "title": "AfterDone",
         "width": 800,
         "height": 600
       }

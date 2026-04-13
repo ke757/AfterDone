@@ -22,7 +22,7 @@ function App() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border px-6 py-4">
-        <h1 className="text-2xl font-bold text-primary">PinTheGoal</h1>
+        <h1 className="text-2xl font-bold text-primary">AfterDone</h1>
         <p className="text-sm text-muted-foreground">Goal Persistence Agent Orchestrator</p>
       </header>
 

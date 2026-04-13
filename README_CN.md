@@ -1,4 +1,4 @@
-# PinTheGoal
+# AfterDone
 
 面向用户的目标持久化工作台，同时也是 Harness Agents 的 Sidecar 工具构建平台。以"目标"为核心锚点，驱动 Agent 持续探索、构建与固化。
 
@@ -48,7 +48,7 @@
 ## 项目结构
 
 ```text
-PinTheGoal/
+AfterDone/
 ├── src/                        # 前端源码
 │   ├── types/                  # TypeScript 类型定义
 │   ├── services/               # Tauri IPC 服务封装

@@ -1,4 +1,4 @@
-# PinTheGoal
+# AfterDone
 
 A goal-persistence workbench for users, and a Sidecar tool-building platform for Harness Agents. Goals are the core anchor — driving Agents to continuously explore, build, and solidify.
 
@@ -63,7 +63,7 @@ Each goal, once initialized, is assigned a **NodeSpace** as its dedicated worksp
 ## Project Structure
 
 ```text
-PinTheGoal/
+AfterDone/
 ├── src/                        # Frontend source
 │   ├── types/                  # TypeScript type definitions
 │   ├── services/               # Tauri IPC service wrappers
