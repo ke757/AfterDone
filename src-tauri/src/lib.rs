@@ -8,6 +8,7 @@ mod events;
 mod state;
 mod commands;
 mod workhub;
+mod chat;
 
 use state::AppState;
 use tauri::Manager;

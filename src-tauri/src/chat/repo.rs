@@ -1,8 +1,9 @@
 use sqlx::SqlitePool;
 
-use crate::db::models::Message;
+use super::types::Message;
 use crate::error::AppResult;
 
+/// Repository for Message operations
 pub struct MessagesRepo;
 
 impl MessagesRepo {

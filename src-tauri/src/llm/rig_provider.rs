@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use futures::Stream;
 
 use crate::config::LlmConfig;
-use crate::db::models::Message;
+use crate::chat::Message;
 use crate::error::{AppError, AppResult};
 use crate::llm::provider::{LLMStream, LlmProvider, StreamChunk};
 

@@ -1,7 +1,8 @@
 ﻿use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::db::models::{AgentType, Goal, Message, Milestone, Skill, AgentLog};
+use crate::workhub::{AgentType, Goal, Milestone, Skill, AgentLog};
+use crate::chat::Message;
 
 /// Context passed to any agent on each run.
 /// Constructed by AgentSupervisor from the database before spawning.

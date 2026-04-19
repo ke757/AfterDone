@@ -7,7 +7,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::agents::AgentStatus;
-use crate::db::models::AgentType;
+use crate::workhub::AgentType;
 use crate::error::AppResult;
 use crate::state::AppState;
 

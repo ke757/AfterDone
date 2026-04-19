@@ -1,8 +1,9 @@
 use sqlx::SqlitePool;
 
-use crate::db::models::AgentLog;
 use crate::error::AppResult;
+use super::super::types::*;
 
+/// Repository for AgentLog operations
 pub struct AgentLogsRepo;
 
 impl AgentLogsRepo {

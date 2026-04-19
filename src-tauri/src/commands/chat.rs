@@ -1,7 +1,6 @@
 use tauri::State;
 
-use crate::db::models::Message;
-use crate::db::repos::MessagesRepo;
+use crate::chat::{Message, MessagesRepo};
 use crate::error::AppResult;
 use crate::state::AppState;
 

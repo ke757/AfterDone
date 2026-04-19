@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use crate::adapter::Transport;
-use crate::db::models::AgentType;
+use crate::workhub::AgentType;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
@@ -185,7 +185,7 @@ impl ExecutorAgent {
         &self,
         ctx: &GoalContext,
         user_manual: &str,
-        skills: &[crate::db::models::Skill],
+        skills: &[crate::workhub::Skill],
         state: &ExecutionState,
         llm: &Arc<dyn LlmProvider>,
     ) -> AppResult<ExecutionAction> {
@@ -228,7 +228,7 @@ Respond with only one line."#,
     fn parse_action(
         &self,
         response: &str,
-        skills: &[crate::db::models::Skill],
+        skills: &[crate::workhub::Skill],
     ) -> AppResult<ExecutionAction> {
         let response = response.trim();
 

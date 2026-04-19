@@ -1,8 +1,9 @@
 use sqlx::SqlitePool;
 
-use crate::db::models::{Goal, CreateGoalInput, UpdateGoalInput};
 use crate::error::{AppError, AppResult};
+use super::super::types::*;
 
+/// Repository for Goal operations
 pub struct GoalsRepo;
 
 impl GoalsRepo {

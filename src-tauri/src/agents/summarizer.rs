@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{AgentOutput, GoalContext};
 use crate::adapter::Transport;
-use crate::db::models::{AgentType, GoalSummary};
+use crate::workhub::{AgentType, GoalSummary};
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::{LlmProvider, PromptTemplate};

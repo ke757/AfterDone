@@ -2,7 +2,7 @@
 
 use crate::error::{AppError, AppResult};
 use super::types::*;
-use super::repo::{WorkSpaceRepo, WorkNodeRepo, GeneratorTaskRepo};
+use super::repos::{WorkSpaceRepo, WorkNodeRepo, GeneratorTaskRepo};
 
 /// Core WorkHub operations for agent tools
 pub struct WorkHub;

@@ -1,8 +1,9 @@
 use sqlx::SqlitePool;
 
-use crate::db::models::Milestone;
 use crate::error::{AppError, AppResult};
+use super::super::types::*;
 
+/// Repository for Milestone operations
 pub struct MilestonesRepo;
 
 impl MilestonesRepo {

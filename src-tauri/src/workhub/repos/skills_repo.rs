@@ -1,8 +1,9 @@
 use sqlx::SqlitePool;
 
-use crate::db::models::Skill;
 use crate::error::{AppError, AppResult};
+use super::super::types::*;
 
+/// Repository for Skill operations (产物管理)
 pub struct SkillsRepo;
 
 impl SkillsRepo {

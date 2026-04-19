@@ -9,8 +9,9 @@ use crate::agents::OptimizerAgent;
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{AgentOutput, AgentStatus, AgentTaskHandle, GoalContext};
 use crate::adapter::Transport;
-use crate::db::models::AgentType;
-use crate::db::{DatabasePool, GoalsRepo, MessagesRepo, SkillsRepo, MilestonesRepo, AgentLogsRepo};
+use crate::workhub::{AgentType, GoalsRepo, MilestonesRepo, SkillsRepo, AgentLogsRepo};
+use crate::chat::MessagesRepo;
+use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
@@ -173,7 +174,7 @@ impl AgentSupervisor {
     }
 
     /// Build the GoalContext from the database
-    async fn build_goal_context(&self, goal: &crate::db::models::Goal) -> AppResult<GoalContext> {
+    async fn build_goal_context(&self, goal: &crate::workhub::Goal) -> AppResult<GoalContext> {
         let current_milestone = match &goal.current_milestone_id {
             Some(mid) => Some(MilestonesRepo::get_by_id(&self.db, mid).await?),
             None => None,
@@ -253,7 +254,7 @@ async fn handle_agent_output(
             let summary_str = serde_json::to_string_pretty(&summary_json)?;
 
             let _goal = GoalsRepo::update_summary(db, goal_id, &summary_str).await?;
-            let _ = GoalsRepo::update(db, goal_id, crate::db::models::UpdateGoalInput {
+            let _ = GoalsRepo::update(db, goal_id, crate::workhub::UpdateGoalInput {
                 title: Some(title.clone()),
                 summary: None,
                 raw_input: None,

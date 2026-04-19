@@ -16,7 +16,8 @@ use crate::adapter::generator::{
     ExecuteParams, ExecuteResponse, StatusParams, StatusResponse,
     METHOD_EXECUTE, METHOD_STATUS,
 };
-use crate::db::models::{AgentType, Message};
+use crate::workhub::AgentType;
+use crate::chat::Message;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;

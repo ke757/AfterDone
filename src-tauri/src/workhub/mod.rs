@@ -1,17 +1,17 @@
 ﻿//! WorkHub Module
 //!
-//! Manages WorkSpaces (workspaces for goals) and WorkNodes (milestone nodes).
-//! Provides resource management for GOAL.md, PLAN.md, BUG.md, USER_MANUAL.md, CONCLUSION.md.
-//!
-//! Key concepts:
-//! - WorkSpace: A workspace that corresponds 1:1 with a Goal
-//! - WorkNode: A milestone node in the execution tree
-//! - CurrentNode: The agent's current position in the tree (no need for agent to remember)
+//! Manages the full lifecycle of goals and their associated workspaces.
+//! Contains all data models, repositories, and business operations for:
+//! - Goals (目标)
+//! - Milestones (里程碑)
+//! - Skills (产物)
+//! - AgentLogs (智能体日志)
+//! - WorkSpaces / WorkNodes / GeneratorTasks (工作区)
 
 pub mod types;
-pub mod repo;
+pub mod repos;
 pub mod ops;
 
 pub use types::*;
-pub use repo::{WorkSpaceRepo, WorkNodeRepo, GeneratorTaskRepo};
+pub use repos::{GoalsRepo, MilestonesRepo, SkillsRepo, AgentLogsRepo, WorkSpaceRepo, WorkNodeRepo, GeneratorTaskRepo};
 pub use ops::WorkHub;

@@ -1,4 +1,4 @@
-use crate::db::models::AgentType;
+use crate::workhub::AgentType;
 
 /// Prompt templates keyed by AgentType.
 /// Each agent type gets a different system prompt.

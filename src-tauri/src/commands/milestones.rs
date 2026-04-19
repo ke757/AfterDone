@@ -1,7 +1,6 @@
 use tauri::State;
 
-use crate::db::models::Milestone;
-use crate::db::repos::MilestonesRepo;
+use crate::workhub::{Milestone, MilestonesRepo};
 use crate::error::AppResult;
 use crate::state::AppState;
 

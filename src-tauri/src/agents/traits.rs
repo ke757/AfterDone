@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 use crate::adapter::Transport;
-use crate::db::models::AgentType;
+use crate::workhub::AgentType;
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
 use crate::error::AppResult;

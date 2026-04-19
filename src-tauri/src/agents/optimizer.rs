@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use crate::adapter::Transport;
-use crate::db::models::AgentType;
+use crate::workhub::AgentType;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;

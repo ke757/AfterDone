@@ -1,7 +1,6 @@
 use tauri::State;
 
-use crate::db::models::{CreateGoalInput, Goal, UpdateGoalInput};
-use crate::db::repos::GoalsRepo;
+use crate::workhub::{CreateGoalInput, Goal, UpdateGoalInput, GoalTree, GoalsRepo};
 use crate::error::AppResult;
 use crate::state::AppState;
 
@@ -81,20 +80,20 @@ pub async fn goals_delete(
 pub async fn goals_tree(
     state: State<'_, AppState>,
     goal_id: String,
-) -> AppResult<crate::db::models::GoalTree> {
+) -> AppResult<GoalTree> {
     let goal = GoalsRepo::get_by_id(&state.db, &goal_id).await?;
     let children = GoalsRepo::get_children(&state.db, &goal_id).await?;
 
     // Simple single-level tree (recursive tree building can be added later)
     let child_trees = children
         .into_iter()
-        .map(|c| crate::db::models::GoalTree {
+        .map(|c| GoalTree {
             goal: c,
             children: vec![],
         })
         .collect();
 
-    Ok(crate::db::models::GoalTree {
+    Ok(GoalTree {
         goal,
         children: child_trees,
     })

@@ -1,7 +1,6 @@
 use tauri::State;
 
-use crate::db::models::Skill;
-use crate::db::repos::SkillsRepo;
+use crate::workhub::{Skill, SkillsRepo};
 use crate::error::AppResult;
 use crate::state::AppState;
 
