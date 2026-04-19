@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+﻿use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::db::models::{AgentType, Goal, Message, Milestone, Skill, AgentLog};
@@ -13,8 +13,8 @@ pub struct GoalContext {
     pub available_skills: Vec<Skill>,
     pub agent_logs: Vec<AgentLog>,
     pub metadata: HashMap<String, serde_json::Value>,
-    /// NodeSpace ID for the goal (if initialized)
-    pub nodespace_id: Option<String>,
+    /// WorkSpace ID for the goal (if initialized)
+    pub workspace_id: Option<String>,
     /// Current WorkNode ID (if any)
     pub current_node_id: Option<String>,
 }

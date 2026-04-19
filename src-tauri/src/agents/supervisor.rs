@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -14,7 +14,7 @@ use crate::db::{DatabasePool, GoalsRepo, MessagesRepo, SkillsRepo, MilestonesRep
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
-use crate::noderepo::NodeRepo;
+use crate::workhub::WorkHub;
 
 /// The AgentSupervisor is the central coordinator.
 /// It owns the lifecycle of all agent tasks and manages phase transitions.
@@ -61,7 +61,7 @@ impl AgentSupervisor {
         let cancel_token = tokio_util::sync::CancellationToken::new();
         let goal_id_owned = goal_id.to_string();
 
-        // Build goal context from DB (includes NodeSpace info)
+        // Build goal context from DB (includes WorkSpace info)
         let ctx = self.build_goal_context(&goal).await?;
 
         // Create the appropriate agent
@@ -192,10 +192,10 @@ impl AgentSupervisor {
 
         let agent_logs = AgentLogsRepo::list_by_goal(&self.db, &goal.id).await?;
 
-        // Get NodeSpace info
-        let nodespace = NodeRepo::get_nodespace_by_goal(&self.db, &goal.id).await?;
-        let (nodespace_id, current_node_id) = match nodespace {
-            Some(ns) => (Some(ns.id), ns.current_node_id),
+        // Get WorkSpace info
+        let workspace = WorkHub::get_workspace_by_goal(&self.db, &goal.id).await?;
+        let (workspace_id, current_node_id) = match workspace {
+            Some(ws) => (Some(ws.id), ws.current_node_id),
             None => (None, None),
         };
 
@@ -206,7 +206,7 @@ impl AgentSupervisor {
             available_skills,
             agent_logs,
             metadata: HashMap::new(),
-            nodespace_id,
+            workspace_id,
             current_node_id,
         })
     }
@@ -325,7 +325,7 @@ async fn handle_agent_output(
 
                 // If we have a current node, persist bugs
                 if !bugs_found.is_empty() {
-                    // In real implementation: use NodeRepo::add_node_bug for each bug
+                    // In real implementation: use WorkHub::add_node_bug for each bug
                     tracing::info!("Execution found {} bugs", bugs_found.len());
                 }
             }

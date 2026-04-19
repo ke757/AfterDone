@@ -1,4 +1,4 @@
-//! Mock Transport for testing and development
+﻿//! Mock Transport for testing and development
 //!
 //! Provides a mock implementation of the Transport trait that simulates
 //! Generator responses without requiring a real HarnessAgent connection.
@@ -216,7 +216,7 @@ mod tests {
         
         let result = transport.send_request("generator.execute", serde_json::json!({
             "task_id": "test-1",
-            "nodespace_id": "ns-1",
+            "workspace_id": "ns-1",
             "specification": {
                 "project_background": "Test",
                 "module_breakdown": [],
@@ -234,7 +234,7 @@ mod tests {
         // First execute
         let _ = transport.send_request("generator.execute", serde_json::json!({
             "task_id": "test-2",
-            "nodespace_id": "ns-1",
+            "workspace_id": "ns-1",
             "specification": {
                 "project_background": "Test",
                 "module_breakdown": [],
@@ -250,3 +250,4 @@ mod tests {
         assert_eq!(status["status"], "running");
     }
 }
+

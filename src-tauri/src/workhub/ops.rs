@@ -1,95 +1,95 @@
-use sqlx::SqlitePool;
+﻿use sqlx::SqlitePool;
 
 use crate::error::{AppError, AppResult};
 use super::types::*;
-use super::repo::{NodeSpaceRepo, WorkNodeRepo, GeneratorTaskRepo};
+use super::repo::{WorkSpaceRepo, WorkNodeRepo, GeneratorTaskRepo};
 
-/// Core NodeRepo operations for agent tools
-pub struct NodeRepo;
+/// Core WorkHub operations for agent tools
+pub struct WorkHub;
 
-impl NodeRepo {
-    // ==================== NodeSpace Operations ====================
+impl WorkHub {
+    // ==================== WorkSpace Operations ====================
 
-    /// Initialize a NodeSpace for a goal
-    pub async fn init_nodespace(db: &SqlitePool, goal_id: &str) -> AppResult<NodeSpace> {
+    /// Initialize a WorkSpace for a goal
+    pub async fn init_workspace(db: &SqlitePool, goal_id: &str) -> AppResult<WorkSpace> {
         // Check if already exists
-        if let Some(existing) = NodeSpaceRepo::get_by_goal_id(db, goal_id).await? {
+        if let Some(existing) = WorkSpaceRepo::get_by_goal_id(db, goal_id).await? {
             return Ok(existing);
         }
 
-        NodeSpaceRepo::create(db, CreateNodeSpaceInput {
+        WorkSpaceRepo::create(db, CreateWorkSpaceInput {
             goal_id: goal_id.to_string(),
             goal_md: None,
             plan_md: None,
         }).await
     }
 
-    /// Get NodeSpace by goal_id
-    pub async fn get_nodespace_by_goal(db: &SqlitePool, goal_id: &str) -> AppResult<Option<NodeSpace>> {
-        NodeSpaceRepo::get_by_goal_id(db, goal_id).await
+    /// Get WorkSpace by goal_id
+    pub async fn get_workspace_by_goal(db: &SqlitePool, goal_id: &str) -> AppResult<Option<WorkSpace>> {
+        WorkSpaceRepo::get_by_goal_id(db, goal_id).await
     }
 
-    /// Get or create NodeSpace for a goal
-    pub async fn get_or_create_nodespace(db: &SqlitePool, goal_id: &str) -> AppResult<NodeSpace> {
-        match NodeSpaceRepo::get_by_goal_id(db, goal_id).await? {
-            Some(ns) => Ok(ns),
-            None => Self::init_nodespace(db, goal_id).await,
+    /// Get or create WorkSpace for a goal
+    pub async fn get_or_create_workspace(db: &SqlitePool, goal_id: &str) -> AppResult<WorkSpace> {
+        match WorkSpaceRepo::get_by_goal_id(db, goal_id).await? {
+            Some(ws) => Ok(ws),
+            None => Self::init_workspace(db, goal_id).await,
         }
     }
 
     // ==================== PLAN.md Operations ====================
 
     /// Store PLAN.md content
-    pub async fn store_plan(db: &SqlitePool, nodespace_id: &str, content: &str) -> AppResult<()> {
-        NodeSpaceRepo::update_plan_md(db, nodespace_id, content).await
+    pub async fn store_plan(db: &SqlitePool, workspace_id: &str, content: &str) -> AppResult<()> {
+        WorkSpaceRepo::update_plan_md(db, workspace_id, content).await
     }
 
     /// Get PLAN.md content
-    pub async fn get_plan(db: &SqlitePool, nodespace_id: &str) -> AppResult<Option<String>> {
-        let ns = NodeSpaceRepo::get_by_id(db, nodespace_id).await?;
-        Ok(ns.plan_md)
+    pub async fn get_plan(db: &SqlitePool, workspace_id: &str) -> AppResult<Option<String>> {
+        let ws = WorkSpaceRepo::get_by_id(db, workspace_id).await?;
+        Ok(ws.plan_md)
     }
 
     // ==================== GOAL.md Operations ====================
 
     /// Store GOAL.md content
-    pub async fn store_goal_md(db: &SqlitePool, nodespace_id: &str, content: &str) -> AppResult<()> {
-        NodeSpaceRepo::update_goal_md(db, nodespace_id, content).await
+    pub async fn store_goal_md(db: &SqlitePool, workspace_id: &str, content: &str) -> AppResult<()> {
+        WorkSpaceRepo::update_goal_md(db, workspace_id, content).await
     }
 
     /// Get GOAL.md content
-    pub async fn get_goal_md(db: &SqlitePool, nodespace_id: &str) -> AppResult<Option<String>> {
-        let ns = NodeSpaceRepo::get_by_id(db, nodespace_id).await?;
-        Ok(ns.goal_md)
+    pub async fn get_goal_md(db: &SqlitePool, workspace_id: &str) -> AppResult<Option<String>> {
+        let ws = WorkSpaceRepo::get_by_id(db, workspace_id).await?;
+        Ok(ws.goal_md)
     }
 
     // ==================== WorkNode Operations ====================
 
     /// Create initial worknode (for BuilderAgent)
-    pub async fn create_initial_worknode(db: &SqlitePool, nodespace_id: &str) -> AppResult<WorkNode> {
+    pub async fn create_initial_worknode(db: &SqlitePool, workspace_id: &str) -> AppResult<WorkNode> {
         // Check if there's already a worknode
-        let existing = WorkNodeRepo::list_by_nodespace(db, nodespace_id).await?;
+        let existing = WorkNodeRepo::list_by_workspace(db, workspace_id).await?;
         if !existing.is_empty() {
             return Err(AppError::Validation("Initial worknode already exists".to_string()));
         }
 
         let node = WorkNodeRepo::create(db, CreateWorkNodeInput {
-            nodespace_id: nodespace_id.to_string(),
+            workspace_id: workspace_id.to_string(),
             parent_node_id: None,
             node_order: 0,
             milestone_id: None,
         }).await?;
 
         // Set as current node
-        NodeSpaceRepo::update_current_node(db, nodespace_id, Some(&node.id)).await?;
+        WorkSpaceRepo::update_current_node(db, workspace_id, Some(&node.id)).await?;
 
         Ok(node)
     }
 
     /// Get current worknode
-    pub async fn get_current_node(db: &SqlitePool, nodespace_id: &str) -> AppResult<Option<WorkNode>> {
-        let ns = NodeSpaceRepo::get_by_id(db, nodespace_id).await?;
-        match ns.current_node_id {
+    pub async fn get_current_node(db: &SqlitePool, workspace_id: &str) -> AppResult<Option<WorkNode>> {
+        let ws = WorkSpaceRepo::get_by_id(db, workspace_id).await?;
+        match ws.current_node_id {
             Some(node_id) => {
                 let node = WorkNodeRepo::get_by_id(db, &node_id).await?;
                 Ok(Some(node))
@@ -103,22 +103,22 @@ impl NodeRepo {
         WorkNodeRepo::get_by_id(db, node_id).await
     }
 
-    /// List all worknodes for a nodespace
-    pub async fn list_worknodes(db: &SqlitePool, nodespace_id: &str) -> AppResult<Vec<WorkNode>> {
-        WorkNodeRepo::list_by_nodespace(db, nodespace_id).await
+    /// List all worknodes for a workspace
+    pub async fn list_worknodes(db: &SqlitePool, workspace_id: &str) -> AppResult<Vec<WorkNode>> {
+        WorkNodeRepo::list_by_workspace(db, workspace_id).await
     }
 
     // ==================== CurrentNode Operations ====================
 
     /// Set current node (used by agent to track progress)
-    pub async fn set_current_node(db: &SqlitePool, nodespace_id: &str, node_id: &str) -> AppResult<()> {
-        // Verify node exists and belongs to nodespace
+    pub async fn set_current_node(db: &SqlitePool, workspace_id: &str, node_id: &str) -> AppResult<()> {
+        // Verify node exists and belongs to workspace
         let node = WorkNodeRepo::get_by_id(db, node_id).await?;
-        if node.nodespace_id != nodespace_id {
-            return Err(AppError::Validation("Node does not belong to this nodespace".to_string()));
+        if node.workspace_id != workspace_id {
+            return Err(AppError::Validation("Node does not belong to this workspace".to_string()));
         }
 
-        NodeSpaceRepo::update_current_node(db, nodespace_id, Some(node_id)).await
+        WorkSpaceRepo::update_current_node(db, workspace_id, Some(node_id)).await
     }
 
     // ==================== BUG.md Operations ====================
@@ -178,11 +178,11 @@ impl NodeRepo {
     /// Mark goal as achieved, create new node
     pub async fn goal_achieved(
         db: &SqlitePool,
-        nodespace_id: &str,
+        workspace_id: &str,
         conclusion: &str,
     ) -> AppResult<String> {
         // Get current node
-        let current = Self::get_current_node(db, nodespace_id).await?
+        let current = Self::get_current_node(db, workspace_id).await?
             .ok_or_else(|| AppError::Validation("No current node set".to_string()))?;
 
         // Update current node conclusion and status
@@ -191,14 +191,14 @@ impl NodeRepo {
 
         // Create new node
         let new_node = WorkNodeRepo::create(db, CreateWorkNodeInput {
-            nodespace_id: nodespace_id.to_string(),
+            workspace_id: workspace_id.to_string(),
             parent_node_id: Some(current.id),
             node_order: current.node_order + 1,
             milestone_id: None,
         }).await?;
 
         // Set as current node
-        NodeSpaceRepo::update_current_node(db, nodespace_id, Some(&new_node.id)).await?;
+        WorkSpaceRepo::update_current_node(db, workspace_id, Some(&new_node.id)).await?;
 
         Ok(new_node.id)
     }
@@ -217,14 +217,14 @@ impl NodeRepo {
 
         // Create new node
         let new_node = WorkNodeRepo::create(db, CreateWorkNodeInput {
-            nodespace_id: parent.nodespace_id.clone(),
+            workspace_id: parent.workspace_id.clone(),
             parent_node_id: Some(parent_node_id.to_string()),
             node_order: parent.node_order + 1,
             milestone_id: None,
         }).await?;
 
         // Set as current node
-        NodeSpaceRepo::update_current_node(db, &parent.nodespace_id, Some(&new_node.id)).await?;
+        WorkSpaceRepo::update_current_node(db, &parent.workspace_id, Some(&new_node.id)).await?;
 
         Ok(new_node.id)
     }
@@ -234,22 +234,22 @@ impl NodeRepo {
     /// Send specification to generator (create task)
     pub async fn send_to_generator(
         db: &SqlitePool,
-        nodespace_id: &str,
+        workspace_id: &str,
         worknode_id: Option<&str>,
         specification: &Specification,
     ) -> AppResult<GeneratorTask> {
         let spec_json = serde_json::to_string(specification)?;
 
         GeneratorTaskRepo::create(db, CreateGeneratorTaskInput {
-            nodespace_id: nodespace_id.to_string(),
+            workspace_id: workspace_id.to_string(),
             worknode_id: worknode_id.map(|s| s.to_string()),
             specification: spec_json,
         }).await
     }
 
     /// Get pending generator task
-    pub async fn get_pending_generator_task(db: &SqlitePool, nodespace_id: &str) -> AppResult<Option<GeneratorTask>> {
-        GeneratorTaskRepo::get_pending_by_nodespace(db, nodespace_id).await
+    pub async fn get_pending_generator_task(db: &SqlitePool, workspace_id: &str) -> AppResult<Option<GeneratorTask>> {
+        GeneratorTaskRepo::get_pending_by_workspace(db, workspace_id).await
     }
 
     /// Complete generator task

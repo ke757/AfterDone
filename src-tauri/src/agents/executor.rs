@@ -1,4 +1,4 @@
-//! Executor Agent
+﻿//! Executor Agent
 //!
 //! Responsible for executing and testing skills during verification phases.
 //! Does not modify any skills - only runs them and reports results.
@@ -14,7 +14,7 @@ use crate::events::EventBridge;
 use crate::llm::LlmProvider;
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{GoalContext, AgentOutput, BugInfo};
-use crate::noderepo::{NodeRepo, BugEntry};
+use crate::workhub::{WorkHub, BugEntry};
 
 /// Maximum execution iterations
 const MAX_ITERATIONS: u32 = 50;
@@ -295,7 +295,7 @@ impl SideCarAgent for ExecutorAgent {
         // If execution failed and we have a current node, add bugs
         if !result.success && !result.bugs.is_empty() {
             // In a real implementation, we would persist bugs to the worknode
-            // using NodeRepo::add_node_bug
+            // using WorkHub::add_node_bug
             emitter.emit_agent_stream(
                 &ctx.goal.id,
                 &format!("Logged {} bugs\n", result.bugs.len()),
@@ -380,3 +380,5 @@ enum ExecutionAction {
         reason: String,
     },
 }
+
+

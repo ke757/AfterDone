@@ -1,4 +1,4 @@
-//! Builder Agent (原型构建 Agent)
+﻿//! Builder Agent (原型构建 Agent)
 //!
 //! Responsible for goal planning and initial achievement.
 //! Core flow:
@@ -22,8 +22,8 @@ use crate::events::EventBridge;
 use crate::llm::LlmProvider;
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{GoalContext, AgentOutput};
-use crate::noderepo::{
-    NodeRepo, Specification, ModuleSpec, SkillRequirement,
+use crate::workhub::{
+    WorkHub, Specification, ModuleSpec, SkillRequirement,
 };
 
 /// Maximum retry attempts for generator
@@ -101,13 +101,13 @@ impl BuilderAgent {
 
         // Create task ID
         let task_id = uuid::Uuid::new_v4().to_string();
-        let nodespace_id = ctx.nodespace_id.clone().unwrap_or_default();
+        let workspace_id = ctx.workspace_id.clone().unwrap_or_default();
         let worknode_id = ctx.current_node_id.clone();
 
         // Build execute params
         let params = ExecuteParams::new(
             task_id.clone(),
-            nodespace_id,
+            workspace_id,
             worknode_id,
             spec.clone(),
         );
@@ -333,7 +333,7 @@ impl BuilderAgent {
             );
 
             // In a real implementation:
-            // - Call NodeRepo::goal_achieved to create new node
+            // - Call WorkHub::goal_achieved to create new node
             // - Write conclusion.md
 
             return Ok(ConclusionResult {
@@ -372,7 +372,7 @@ impl BuilderAgent {
 
     /// Get existing conclusion from current worknode
     async fn get_existing_conclusion(&self, _ctx: &GoalContext) -> AppResult<Option<String>> {
-        // In a real implementation, use NodeRepo::get_node_conclusion
+        // In a real implementation, use WorkHub::get_node_conclusion
         Ok(None)
     }
 
@@ -564,7 +564,7 @@ impl SideCarAgent for BuilderAgent {
             }
 
             // Store conclusion for retry context
-            // In real implementation: NodeRepo::set_node_conclusion
+            // In real implementation: WorkHub::set_node_conclusion
 
             attempt += 1;
         }

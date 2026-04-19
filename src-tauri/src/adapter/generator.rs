@@ -1,4 +1,4 @@
-//! Generator Communication Protocol
+﻿//! Generator Communication Protocol
 //!
 //! Defines the JSON-RPC methods and types for communicating with
 //! HarnessAgent (Generator) via the Transport trait.
@@ -11,7 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::noderepo::Specification;
+use crate::workhub::Specification;
 
 /// Generator method names
 pub const METHOD_EXECUTE: &str = "generator.execute";
@@ -24,8 +24,8 @@ pub const METHOD_LIST_SKILLS: &str = "generator.listSkills";
 pub struct ExecuteParams {
     /// Task ID (for tracking)
     pub task_id: String,
-    /// NodeSpace ID
-    pub nodespace_id: String,
+    /// WorkSpace ID
+    pub workspace_id: String,
     /// WorkNode ID (optional)
     pub worknode_id: Option<String>,
     /// The specification to execute
@@ -156,13 +156,13 @@ impl ExecuteParams {
     /// Create new execute params
     pub fn new(
         task_id: String,
-        nodespace_id: String,
+        workspace_id: String,
         worknode_id: Option<String>,
         specification: Specification,
     ) -> Self {
         Self {
             task_id,
-            nodespace_id,
+            workspace_id,
             worknode_id,
             specification,
             context: serde_json::Value::Null,
@@ -193,3 +193,4 @@ mod tests {
         assert!(json.contains("ns-1"));
     }
 }
+

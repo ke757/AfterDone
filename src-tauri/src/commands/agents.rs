@@ -1,6 +1,7 @@
 //! Agent IPC commands
 //!
 //! Commands for controlling agent lifecycle (start, stop, status)
+//! Agent 代理生命周期控制命令
 
 use serde::Serialize;
 use tauri::State;

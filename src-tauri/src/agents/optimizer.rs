@@ -1,4 +1,4 @@
-//! Optimizer Agent (目标优化 Agent)
+﻿//! Optimizer Agent (鐩爣浼樺寲 Agent)
 //!
 //! Responsible for optimizing achieved goals, fixing bugs, and solidifying.
 //! Core flow:
@@ -18,7 +18,7 @@ use crate::events::EventBridge;
 use crate::llm::LlmProvider;
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{GoalContext, AgentOutput, Optimization};
-use crate::noderepo::{NodeRepo, TodoList, TodoItem, BugEntry};
+use crate::workhub::{WorkHub, TodoList, TodoItem, BugEntry};
 
 /// Maximum retry attempts
 const MAX_RETRIES: u32 = 10;
@@ -188,7 +188,7 @@ impl OptimizerAgent {
             );
 
             // In real implementation:
-            // - Call NodeRepo::node_achieved
+            // - Call WorkHub::node_achieved
             // - Update bugs (remove resolved ones)
             // - Write conclusion.md
 
@@ -197,7 +197,7 @@ impl OptimizerAgent {
                 solidified: generator_result.optimizations.is_empty(),
                 message: "Optimization successful".to_string(),
                 optimizations: generator_result.optimizations.clone(),
-                new_node_id: None, // Would be set by NodeRepo::node_achieved
+                new_node_id: None, // Would be set by WorkHub::node_achieved
             });
         }
 
@@ -232,21 +232,21 @@ impl OptimizerAgent {
         })
     }
 
-    /// Get PLAN.md from nodespace
+    /// Get PLAN.md from workspace
     async fn get_plan(&self, _ctx: &GoalContext) -> AppResult<Option<String>> {
-        // In real implementation: NodeRepo::get_plan
+        // In real implementation: WorkHub::get_plan
         Ok(None)
     }
 
     /// Get bugs from parent worknode
     async fn get_parent_bugs(&self, _ctx: &GoalContext) -> AppResult<Vec<BugEntry>> {
-        // In real implementation: NodeRepo::get_node_bug
+        // In real implementation: WorkHub::get_node_bug
         Ok(vec![])
     }
 
     /// Get conclusion from parent worknode
     async fn get_parent_conclusion(&self, _ctx: &GoalContext) -> AppResult<Option<String>> {
-        // In real implementation: NodeRepo::get_node_conclusion
+        // In real implementation: WorkHub::get_node_conclusion
         Ok(None)
     }
 
@@ -505,3 +505,6 @@ struct ConclusionResult {
     optimizations: Vec<Optimization>,
     new_node_id: Option<String>,
 }
+
+
+

@@ -23,6 +23,7 @@ pub async fn init_db(database_path: &Path) -> AppResult<SqlitePool> {
 }
 
 async fn run_migrations(pool: &SqlitePool) -> AppResult<()> {
+    // SQL 文件不是运行时从磁盘读取，而是在编译时就已经被"打包"进可执行文件中
     let migration_001 = include_str!("../../migrations/001_initial.sql");
     let migration_002 = include_str!("../../migrations/002_nodespace.sql");
 

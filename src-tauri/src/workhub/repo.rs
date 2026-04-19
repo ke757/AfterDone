@@ -4,17 +4,17 @@ use serde_json;
 use crate::error::{AppError, AppResult};
 use super::types::*;
 
-/// Repository for NodeSpace operations
-pub struct NodeSpaceRepo;
+/// Repository for WorkSpace operations
+pub struct WorkSpaceRepo;
 
-impl NodeSpaceRepo {
-    /// Create a new NodeSpace for a goal
-    pub async fn create(db: &SqlitePool, input: CreateNodeSpaceInput) -> AppResult<NodeSpace> {
+impl WorkSpaceRepo {
+    /// Create a new WorkSpace for a goal
+    pub async fn create(db: &SqlitePool, input: CreateWorkSpaceInput) -> AppResult<WorkSpace> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
 
         sqlx::query(
-            "INSERT INTO nodespaces (id, goal_id, goal_md, plan_md, created_at, updated_at)
+            "INSERT INTO workspaces (id, goal_id, goal_md, plan_md, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?)"
         )
         .bind(&id)
@@ -29,23 +29,23 @@ impl NodeSpaceRepo {
         Self::get_by_id(db, &id).await
     }
 
-    /// Get NodeSpace by id
-    pub async fn get_by_id(db: &SqlitePool, id: &str) -> AppResult<NodeSpace> {
-        sqlx::query_as::<_, NodeSpace>(
+    /// Get WorkSpace by id
+    pub async fn get_by_id(db: &SqlitePool, id: &str) -> AppResult<WorkSpace> {
+        sqlx::query_as::<_, WorkSpace>(
             "SELECT id, goal_id, current_node_id, goal_md, plan_md, created_at, updated_at
-             FROM nodespaces WHERE id = ?"
+             FROM workspaces WHERE id = ?"
         )
         .bind(id)
         .fetch_optional(db)
         .await?
-        .ok_or_else(|| AppError::NotFound(format!("NodeSpace not found: {}", id)))
+        .ok_or_else(|| AppError::NotFound(format!("WorkSpace not found: {}", id)))
     }
 
-    /// Get NodeSpace by goal_id
-    pub async fn get_by_goal_id(db: &SqlitePool, goal_id: &str) -> AppResult<Option<NodeSpace>> {
-        sqlx::query_as::<_, NodeSpace>(
+    /// Get WorkSpace by goal_id
+    pub async fn get_by_goal_id(db: &SqlitePool, goal_id: &str) -> AppResult<Option<WorkSpace>> {
+        sqlx::query_as::<_, WorkSpace>(
             "SELECT id, goal_id, current_node_id, goal_md, plan_md, created_at, updated_at
-             FROM nodespaces WHERE goal_id = ?"
+             FROM workspaces WHERE goal_id = ?"
         )
         .bind(goal_id)
         .fetch_optional(db)
@@ -56,7 +56,7 @@ impl NodeSpaceRepo {
     /// Update GOAL.md
     pub async fn update_goal_md(db: &SqlitePool, id: &str, content: &str) -> AppResult<()> {
         let now = chrono::Utc::now().to_rfc3339();
-        sqlx::query("UPDATE nodespaces SET goal_md = ?, updated_at = ? WHERE id = ?")
+        sqlx::query("UPDATE workspaces SET goal_md = ?, updated_at = ? WHERE id = ?")
             .bind(content)
             .bind(&now)
             .bind(id)
@@ -68,7 +68,7 @@ impl NodeSpaceRepo {
     /// Update PLAN.md
     pub async fn update_plan_md(db: &SqlitePool, id: &str, content: &str) -> AppResult<()> {
         let now = chrono::Utc::now().to_rfc3339();
-        sqlx::query("UPDATE nodespaces SET plan_md = ?, updated_at = ? WHERE id = ?")
+        sqlx::query("UPDATE workspaces SET plan_md = ?, updated_at = ? WHERE id = ?")
             .bind(content)
             .bind(&now)
             .bind(id)
@@ -80,7 +80,7 @@ impl NodeSpaceRepo {
     /// Update current node
     pub async fn update_current_node(db: &SqlitePool, id: &str, node_id: Option<&str>) -> AppResult<()> {
         let now = chrono::Utc::now().to_rfc3339();
-        sqlx::query("UPDATE nodespaces SET current_node_id = ?, updated_at = ? WHERE id = ?")
+        sqlx::query("UPDATE workspaces SET current_node_id = ?, updated_at = ? WHERE id = ?")
             .bind(node_id)
             .bind(&now)
             .bind(id)
@@ -89,15 +89,15 @@ impl NodeSpaceRepo {
         Ok(())
     }
 
-    /// Delete NodeSpace
+    /// Delete WorkSpace
     pub async fn delete(db: &SqlitePool, id: &str) -> AppResult<()> {
-        let result = sqlx::query("DELETE FROM nodespaces WHERE id = ?")
+        let result = sqlx::query("DELETE FROM workspaces WHERE id = ?")
             .bind(id)
             .execute(db)
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(AppError::NotFound(format!("NodeSpace not found: {}", id)));
+            return Err(AppError::NotFound(format!("WorkSpace not found: {}", id)));
         }
 
         Ok(())
@@ -115,11 +115,11 @@ impl WorkNodeRepo {
         let status = WorkNodeStatus::Planned.to_string();
 
         sqlx::query(
-            "INSERT INTO worknodes (id, nodespace_id, parent_node_id, node_order, status, milestone_id, created_at, updated_at)
+            "INSERT INTO worknodes (id, workspace_id, parent_node_id, node_order, status, milestone_id, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&id)
-        .bind(&input.nodespace_id)
+        .bind(&input.workspace_id)
         .bind(&input.parent_node_id)
         .bind(input.node_order)
         .bind(&status)
@@ -135,7 +135,7 @@ impl WorkNodeRepo {
     /// Get WorkNode by id
     pub async fn get_by_id(db: &SqlitePool, id: &str) -> AppResult<WorkNode> {
         sqlx::query_as::<_, WorkNode>(
-            "SELECT id, nodespace_id, parent_node_id, node_order, status,
+            "SELECT id, workspace_id, parent_node_id, node_order, status,
                     bug_md, user_manual_md, conclusion_md, milestone_id,
                     plan_summary, result_summary, created_at, updated_at
              FROM worknodes WHERE id = ?"
@@ -146,16 +146,16 @@ impl WorkNodeRepo {
         .ok_or_else(|| AppError::NotFound(format!("WorkNode not found: {}", id)))
     }
 
-    /// List all WorkNodes for a NodeSpace
-    pub async fn list_by_nodespace(db: &SqlitePool, nodespace_id: &str) -> AppResult<Vec<WorkNode>> {
+    /// List all WorkNodes for a WorkSpace
+    pub async fn list_by_workspace(db: &SqlitePool, workspace_id: &str) -> AppResult<Vec<WorkNode>> {
         sqlx::query_as::<_, WorkNode>(
-            "SELECT id, nodespace_id, parent_node_id, node_order, status,
+            "SELECT id, workspace_id, parent_node_id, node_order, status,
                     bug_md, user_manual_md, conclusion_md, milestone_id,
                     plan_summary, result_summary, created_at, updated_at
-             FROM worknodes WHERE nodespace_id = ?
+             FROM worknodes WHERE workspace_id = ?
              ORDER BY node_order ASC"
         )
-        .bind(nodespace_id)
+        .bind(workspace_id)
         .fetch_all(db)
         .await
         .map_err(AppError::Database)
@@ -164,7 +164,7 @@ impl WorkNodeRepo {
     /// Get children of a WorkNode
     pub async fn list_children(db: &SqlitePool, parent_id: &str) -> AppResult<Vec<WorkNode>> {
         sqlx::query_as::<_, WorkNode>(
-            "SELECT id, nodespace_id, parent_node_id, node_order, status,
+            "SELECT id, workspace_id, parent_node_id, node_order, status,
                     bug_md, user_manual_md, conclusion_md, milestone_id,
                     plan_summary, result_summary, created_at, updated_at
              FROM worknodes WHERE parent_node_id = ?
@@ -263,11 +263,11 @@ impl GeneratorTaskRepo {
         let status = GeneratorTaskStatus::Pending.to_string();
 
         sqlx::query(
-            "INSERT INTO generator_tasks (id, nodespace_id, worknode_id, specification, status, created_at, updated_at)
+            "INSERT INTO generator_tasks (id, workspace_id, worknode_id, specification, status, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&id)
-        .bind(&input.nodespace_id)
+        .bind(&input.workspace_id)
         .bind(&input.worknode_id)
         .bind(&input.specification)
         .bind(&status)
@@ -282,7 +282,7 @@ impl GeneratorTaskRepo {
     /// Get GeneratorTask by id
     pub async fn get_by_id(db: &SqlitePool, id: &str) -> AppResult<GeneratorTask> {
         sqlx::query_as::<_, GeneratorTask>(
-            "SELECT id, nodespace_id, worknode_id, specification, status,
+            "SELECT id, workspace_id, worknode_id, specification, status,
                     result, user_manual, skills_json, created_at, updated_at
              FROM generator_tasks WHERE id = ?"
         )
@@ -292,16 +292,16 @@ impl GeneratorTaskRepo {
         .ok_or_else(|| AppError::NotFound(format!("GeneratorTask not found: {}", id)))
     }
 
-    /// Get pending tasks for a NodeSpace
-    pub async fn get_pending_by_nodespace(db: &SqlitePool, nodespace_id: &str) -> AppResult<Option<GeneratorTask>> {
+    /// Get pending tasks for a WorkSpace
+    pub async fn get_pending_by_workspace(db: &SqlitePool, workspace_id: &str) -> AppResult<Option<GeneratorTask>> {
         sqlx::query_as::<_, GeneratorTask>(
-            "SELECT id, nodespace_id, worknode_id, specification, status,
+            "SELECT id, workspace_id, worknode_id, specification, status,
                     result, user_manual, skills_json, created_at, updated_at
              FROM generator_tasks
-             WHERE nodespace_id = ? AND status IN ('pending', 'running')
+             WHERE workspace_id = ? AND status IN ('pending', 'running')
              ORDER BY created_at DESC LIMIT 1"
         )
-        .bind(nodespace_id)
+        .bind(workspace_id)
         .fetch_optional(db)
         .await
         .map_err(AppError::Database)

@@ -1,4 +1,4 @@
-mod error;
+﻿mod error;
 mod config;
 mod db;
 mod adapter;
@@ -7,7 +7,7 @@ mod agents;
 mod events;
 mod state;
 mod commands;
-mod noderepo;
+mod workhub;
 
 use state::AppState;
 use tauri::Manager;
@@ -73,22 +73,22 @@ pub fn run() {
             commands::config_cmd::config_test_llm,
             commands::chat::chat_send,
             commands::chat::chat_history,
-            // NodeSpace & WorkNode commands
-            commands::noderepo_cmd::nodespace_init,
-            commands::noderepo_cmd::nodespace_get,
-            commands::noderepo_cmd::nodespace_get_or_create,
-            commands::noderepo_cmd::nodespace_update_plan,
-            commands::noderepo_cmd::nodespace_get_plan,
-            commands::noderepo_cmd::worknode_create_initial,
-            commands::noderepo_cmd::worknode_get_current,
-            commands::noderepo_cmd::worknode_get,
-            commands::noderepo_cmd::worknode_list,
-            commands::noderepo_cmd::worknode_get_bugs,
-            commands::noderepo_cmd::worknode_add_bug,
-            commands::noderepo_cmd::worknode_get_conclusion,
-            commands::noderepo_cmd::worknode_get_user_manual,
-            commands::noderepo_cmd::worknode_goal_achieved,
-            commands::noderepo_cmd::worknode_achieved,
+            // WorkSpace & WorkNode commands
+            commands::workhub_cmd::workspace_init,
+            commands::workhub_cmd::workspace_get,
+            commands::workhub_cmd::workspace_get_or_create,
+            commands::workhub_cmd::workspace_update_plan,
+            commands::workhub_cmd::workspace_get_plan,
+            commands::workhub_cmd::worknode_create_initial,
+            commands::workhub_cmd::worknode_get_current,
+            commands::workhub_cmd::worknode_get,
+            commands::workhub_cmd::worknode_list,
+            commands::workhub_cmd::worknode_get_bugs,
+            commands::workhub_cmd::worknode_add_bug,
+            commands::workhub_cmd::worknode_get_conclusion,
+            commands::workhub_cmd::worknode_get_user_manual,
+            commands::workhub_cmd::worknode_goal_achieved,
+            commands::workhub_cmd::worknode_achieved,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

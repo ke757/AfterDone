@@ -23,9 +23,9 @@ impl BugEntry {
     }
 }
 
-/// NodeSpace: the workspace for a goal
+/// WorkSpace: the workspace for a goal
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct NodeSpace {
+pub struct WorkSpace {
     pub id: String,
     pub goal_id: String,
     pub current_node_id: Option<String>,
@@ -39,7 +39,7 @@ pub struct NodeSpace {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct WorkNode {
     pub id: String,
-    pub nodespace_id: String,
+    pub workspace_id: String,
     pub parent_node_id: Option<String>,
     pub node_order: i32,
     pub status: String,
@@ -91,7 +91,7 @@ impl TryFrom<&str> for WorkNodeStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct GeneratorTask {
     pub id: String,
-    pub nodespace_id: String,
+    pub workspace_id: String,
     pub worknode_id: Option<String>,
     pub specification: String,
     pub status: String,
@@ -123,9 +123,9 @@ impl std::fmt::Display for GeneratorTaskStatus {
     }
 }
 
-/// Create NodeSpace input
+/// Create WorkSpace input
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateNodeSpaceInput {
+pub struct CreateWorkSpaceInput {
     pub goal_id: String,
     pub goal_md: Option<String>,
     pub plan_md: Option<String>,
@@ -134,7 +134,7 @@ pub struct CreateNodeSpaceInput {
 /// Create WorkNode input
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateWorkNodeInput {
-    pub nodespace_id: String,
+    pub workspace_id: String,
     pub parent_node_id: Option<String>,
     pub node_order: i32,
     pub milestone_id: Option<String>,
@@ -143,7 +143,7 @@ pub struct CreateWorkNodeInput {
 /// Create GeneratorTask input
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateGeneratorTaskInput {
-    pub nodespace_id: String,
+    pub workspace_id: String,
     pub worknode_id: Option<String>,
     pub specification: String,
 }
