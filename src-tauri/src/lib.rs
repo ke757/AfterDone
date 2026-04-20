@@ -1,4 +1,4 @@
-﻿mod error;
+mod error;
 mod config;
 mod db;
 mod adapter;
@@ -76,6 +76,7 @@ pub fn run() {
             commands::chat::chat_history,
             // WorkSpace & WorkNode commands
             commands::workhub_cmd::workspace_init,
+            commands::workhub_cmd::workspace_list,
             commands::workhub_cmd::workspace_get,
             commands::workhub_cmd::workspace_get_or_create,
             commands::workhub_cmd::workspace_update_plan,

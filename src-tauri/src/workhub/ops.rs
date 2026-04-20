@@ -1,4 +1,4 @@
-﻿use sqlx::SqlitePool;
+use sqlx::SqlitePool;
 
 use crate::error::{AppError, AppResult};
 use super::types::*;
@@ -22,6 +22,11 @@ impl WorkHub {
             goal_md: None,
             plan_md: None,
         }).await
+    }
+    
+    /// List all WorkSpaces
+    pub async fn list_workspaces(db: &SqlitePool) -> AppResult<Vec<WorkSpace>> {
+        WorkSpaceRepo::list_all(db).await
     }
 
     /// Get WorkSpace by goal_id

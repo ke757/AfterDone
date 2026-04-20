@@ -1,4 +1,4 @@
-﻿//! WorkSpace and WorkNode IPC commands
+//! WorkSpace and WorkNode IPC commands
 
 use tauri::State;
 use serde::{Deserialize, Serialize};
@@ -35,6 +35,14 @@ pub async fn workspace_get_or_create(
     goal_id: String,
 ) -> AppResult<WorkSpace> {
     WorkHub::get_or_create_workspace(&state.db, &goal_id).await
+}
+
+/// List all WorkSpaces
+#[tauri::command]
+pub async fn workspace_list(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<WorkSpace>> {
+    WorkHub::list_workspaces(&state.db).await
 }
 
 /// Update PLAN.md

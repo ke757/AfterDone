@@ -89,6 +89,17 @@ impl WorkSpaceRepo {
         Ok(())
     }
 
+    /// List all WorkSpaces
+    pub async fn list_all(db: &SqlitePool) -> AppResult<Vec<WorkSpace>> {
+        sqlx::query_as::<_, WorkSpace>(
+            "SELECT id, goal_id, current_node_id, goal_md, plan_md, created_at, updated_at
+             FROM workspaces ORDER BY created_at DESC"
+        )
+        .fetch_all(db)
+        .await
+        .map_err(AppError::Database)
+    }
+
     /// Delete WorkSpace
     pub async fn delete(db: &SqlitePool, id: &str) -> AppResult<()> {
         let result = sqlx::query("DELETE FROM workspaces WHERE id = ?")
