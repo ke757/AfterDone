@@ -11,6 +11,7 @@ use crate::agents::types::{GoalContext, AgentOutput};
 /// Core trait for all SideCar Agents.
 /// Agents are pure `run() → output` functions.
 /// The supervisor handles spawning, cancellation, persistence, and phase transitions.
+/// supervisor 负责处理生成、取消、持续和阶段转换。
 #[async_trait]
 pub trait SideCarAgent: Send + Sync {
     /// Which agent type this is

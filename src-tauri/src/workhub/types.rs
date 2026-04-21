@@ -85,10 +85,10 @@ pub struct UpdateGoalInput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoalSummary {
     pub title: String,
-    pub description: String,
-    pub acceptance_criteria: Vec<String>,
-    pub constraints: Vec<String>,
-    pub refinement_questions: Vec<String>,
+    pub description: String,                // 描述
+    pub acceptance_criteria: Vec<String>,   // 验收标准
+    pub constraints: Vec<String>,           // 约束
+    pub refinement_questions: Vec<String>,  // 细化问题
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

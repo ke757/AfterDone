@@ -10,7 +10,7 @@ use crate::events::EventBridge;
 use crate::llm::{LlmProvider, PromptTemplate};
 
 /// Goal Summarization Agent.
-/// Takes raw user input, generates a structured goal summary and refinement questions.
+/// 接收原始用户输入，生成结构化的目标摘要和细化问题。
 pub struct GoalSummarizerAgent {
     cancel_token: tokio_util::sync::CancellationToken,
 }
@@ -45,7 +45,7 @@ impl SideCarAgent for GoalSummarizerAgent {
             ctx.goal.raw_input
         );
 
-        // Use streaming to show progress to the frontend
+        // 使用流式处理向前端展示进度
         let mut stream = llm.stream(system_prompt, &user_prompt, &[]).await?;
         let mut full_response = String::new();
 
@@ -101,6 +101,7 @@ impl SideCarAgent for GoalSummarizerAgent {
 
 /// Parse the LLM response into a GoalSummary.
 /// The LLM is prompted to return JSON, but we handle common issues.
+/// LLM 被提示返回JSON格式的数据，但我们会处理常见问题。
 fn parse_summary_response(response: &str) -> AppResult<GoalSummary> {
     // Try to extract JSON from the response (may be wrapped in markdown code blocks)
     let json_str = extract_json(response);
