@@ -1,12 +1,14 @@
-﻿use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::workhub::{AgentType, Goal, Milestone, Skill, AgentLog};
 use crate::chat::Message;
+use crate::memory::ChatMemory;
 
 /// Context passed to any agent on each run.
 /// Constructed by AgentSupervisor from the database before spawning.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GoalContext {
     pub goal: Goal,
     pub current_milestone: Option<Milestone>,
@@ -18,6 +20,8 @@ pub struct GoalContext {
     pub workspace_id: Option<String>,
     /// Current WorkNode ID (if any)
     pub current_node_id: Option<String>,
+    /// In-memory chat memory keyed by goal_id for multi-turn conversations
+    pub memory: Arc<dyn ChatMemory>,
 }
 
 /// Output from an agent run
@@ -81,8 +85,8 @@ pub struct Optimization {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentStatus {
-    Starting,
-    Running,
+    Starting,       // 已收到，安排开始
+    Running,        // 正在运行
     Canceling,
     Completed,
     Failed,

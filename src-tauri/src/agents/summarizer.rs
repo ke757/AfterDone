@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 
+use rig::completion::message::Message as RigMessage;
+
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{AgentOutput, GoalContext};
 use crate::adapter::Transport;
@@ -8,16 +10,20 @@ use crate::workhub::{AgentType, GoalSummary};
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::{LlmProvider, PromptTemplate};
+use crate::memory::ChatMemory;
 
 /// Goal Summarization Agent.
-/// 接收原始用户输入，生成结构化的目标摘要和细化问题。
+/// Supports multi-turn conversation: each invocation appends user input
+/// to the goal's memory, and the LLM receives the full conversation
+/// history so it can refine the summary incrementally.
 pub struct GoalSummarizerAgent {
     cancel_token: tokio_util::sync::CancellationToken,
+    memory: Arc<dyn ChatMemory>,
 }
 
 impl GoalSummarizerAgent {
-    pub fn new(cancel_token: tokio_util::sync::CancellationToken) -> Self {
-        Self { cancel_token }
+    pub fn new(cancel_token: tokio_util::sync::CancellationToken, memory: Arc<dyn ChatMemory>) -> Self {
+        Self { cancel_token, memory }
     }
 }
 
@@ -36,23 +42,46 @@ impl SideCarAgent for GoalSummarizerAgent {
     ) -> AppResult<AgentOutput> {
         let goal_id = &ctx.goal.id;
 
-        // Emit status: started
         emitter.emit_agent_status(goal_id, "summarizer", "running", "summarizing");
 
-        let system_prompt = PromptTemplate::system_prompt(&AgentType::Summarizer);
-        let user_prompt = format!(
-            "Please summarize the following goal description:\n\n{}",
-            ctx.goal.raw_input
+        // 将 user message 添加到 memory
+        self.memory.add_message(
+            goal_id,
+            RigMessage::user(&ctx.goal.raw_input),
         );
 
+        // 从 memory 中构建对话历史
+        let history = self.memory.get_history(goal_id);
+        let context = self.memory.to_db_context(goal_id, goal_id);
+
+        let system_prompt = PromptTemplate::system_prompt(&AgentType::Summarizer);
+
+        // If there's prior history (multi-turn), include a refinement instruction
+        let user_prompt = if history.len() > 1 {
+            format!(
+                "[Conversation history shows {} prior exchanges.]\n\n\
+                 Latest user input:\n{}\n\n\
+                 Please update the goal summary considering all previous context. \
+                 Incorporate the new information while preserving the structure.",
+                history.len() - 1,
+                ctx.goal.raw_input,
+            )
+        } else {
+            format!(
+                "Please summarize the following goal description:\n\n{}",
+                ctx.goal.raw_input,
+            )
+        };
+        
         // 使用流式处理向前端展示进度
-        let mut stream = llm.stream(system_prompt, &user_prompt, &[]).await?;
+        let mut stream = llm.stream(system_prompt, &user_prompt, &context).await?;
         let mut full_response = String::new();
 
         use futures::StreamExt;
         while let Some(chunk) = stream.next().await {
             if self.cancel_token.is_cancelled() {
                 emitter.emit_agent_status(goal_id, "summarizer", "canceled", "summarizing");
+                self.memory.clear(goal_id);
                 return Err(AppError::Agent("Summarizer was canceled".to_string()));
             }
 
@@ -73,7 +102,12 @@ impl SideCarAgent for GoalSummarizerAgent {
             }
         }
 
-        // Parse the LLM response as a GoalSummary
+        // Store assistant response in memory for future turns
+        self.memory.add_message(
+            goal_id,
+            RigMessage::assistant(&full_response),
+        );
+
         let summary = parse_summary_response(&full_response)?;
 
         emitter.emit_agent_status(goal_id, "summarizer", "completed", "summarizing");
@@ -100,26 +134,21 @@ impl SideCarAgent for GoalSummarizerAgent {
 }
 
 /// Parse the LLM response into a GoalSummary.
-/// The LLM is prompted to return JSON, but we handle common issues.
-/// LLM 被提示返回JSON格式的数据，但我们会处理常见问题。
 fn parse_summary_response(response: &str) -> AppResult<GoalSummary> {
-    // Try to extract JSON from the response (may be wrapped in markdown code blocks)
+    // 尝试从响应中提取JSON（可能被包裹在Markdown代码块中）
     let json_str = extract_json(response);
 
     match serde_json::from_str::<GoalSummary>(&json_str) {
         Ok(summary) => Ok(summary),
-        Err(_) => {
-            // Fallback: create a basic summary from the raw response
-            Ok(GoalSummary {
-                title: "Goal".to_string(),
-                description: response.trim().to_string(),
-                acceptance_criteria: vec!["Goal must be verifiably completed".to_string()],
-                constraints: vec![],
-                refinement_questions: vec![
-                    "Could you provide more details about this goal?".to_string()
-                ],
-            })
-        }
+        Err(_) => Ok(GoalSummary {
+            title: "Goal".to_string(),
+            description: response.trim().to_string(),
+            acceptance_criteria: vec!["Goal must be verifiably completed".to_string()],
+            constraints: vec![],
+            refinement_questions: vec![
+                "Could you provide more details about this goal?".to_string()
+            ],
+        }),
     }
 }
 
@@ -127,10 +156,10 @@ fn parse_summary_response(response: &str) -> AppResult<GoalSummary> {
 fn extract_json(text: &str) -> String {
     let trimmed = text.trim();
 
-    // Check for markdown code block wrapping
+    // 检查是否包含Markdown代码块换行
     if let Some(start) = trimmed.find("```json") {
         if let Some(end) = trimmed.rfind("```") {
-            let json_start = start + 7; // skip "```json"
+            let json_start = start + 7;
             return trimmed[json_start..end].trim().to_string();
         }
     }
@@ -144,7 +173,7 @@ fn extract_json(text: &str) -> String {
         }
     }
 
-    // Check for raw JSON object
+    // 检查原始JSON对象
     if trimmed.starts_with('{') {
         if let Some(end) = trimmed.rfind('}') {
             return trimmed[..=end].to_string();

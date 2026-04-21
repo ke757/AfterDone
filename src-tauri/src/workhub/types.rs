@@ -55,6 +55,7 @@ impl TryFrom<&str> for GoalStatus {
     }
 }
 
+/// 目标
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Goal {
     pub id: String,
@@ -69,6 +70,7 @@ pub struct Goal {
     pub updated_at: String,
 }
 
+/// 创建目标输入
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateGoalInput {
     pub raw_input: String,
@@ -91,11 +93,11 @@ pub struct GoalSummary {
     pub refinement_questions: Vec<String>,  // 细化问题
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GoalTree {
-    pub goal: Goal,
-    pub children: Vec<GoalTree>,
-}
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct GoalTree {
+//     pub goal: Goal,
+//     pub children: Vec<GoalTree>,
+// }
 
 // ==================== Milestone Types ====================
 

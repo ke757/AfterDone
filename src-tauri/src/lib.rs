@@ -9,6 +9,7 @@ mod state;
 mod commands;
 mod workhub;
 mod chat;
+mod memory;
 
 use state::AppState;
 use tauri::Manager;

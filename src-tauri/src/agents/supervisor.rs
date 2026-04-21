@@ -1,4 +1,4 @@
-﻿use std::collections::HashMap;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -15,16 +15,18 @@ use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
+use crate::memory::{ChatMemory, InMemoryChatMemory};
 use crate::workhub::WorkHub;
 
-/// The AgentSupervisor is the central coordinator.
-/// It owns the lifecycle of all agent tasks and manages phase transitions.
+/// The AgentSupervisor is the central coordinator(调度器).
+/// It owns the lifecycle of all agent tasks and manages phase transitions(阶段转换).
 pub struct AgentSupervisor {
     db: DatabasePool,
     transport: Arc<dyn Transport>,
     llm: Arc<dyn LlmProvider>,
     emitter: EventBridge,
     tasks: Arc<RwLock<HashMap<String, AgentTaskHandle>>>,
+    memory: Arc<dyn ChatMemory>,
 }
 
 impl AgentSupervisor {
@@ -40,16 +42,36 @@ impl AgentSupervisor {
             llm,
             emitter,
             tasks: Arc::new(RwLock::new(HashMap::new())),
+            memory: Arc::new(InMemoryChatMemory::new()),
         }
     }
 
-    /// Start an agent for the given goal.
-    /// The agent type is determined by the current goal status.
+    /// 创建一个带有自定义内存的AgentSupervisor.
+    pub fn with_memory(
+        db: DatabasePool,
+        transport: Arc<dyn Transport>,
+        llm: Arc<dyn LlmProvider>,
+        emitter: EventBridge,
+        memory: Arc<dyn ChatMemory>,
+    ) -> Self {
+        Self {
+            db,
+            transport,
+            llm,
+            emitter,
+            tasks: Arc::new(RwLock::new(HashMap::new())),
+            memory,
+        }
+    }
+
+    /// 为给定的目标启动一个代理.
+    /// - 根据当前目标状态确定代理类型.
+    /// - 维护 agent 运行时的状态变更
     pub async fn start_agent(&self, goal_id: &str) -> AppResult<AgentStatus> {
         let goal = GoalsRepo::get_by_id(&self.db, goal_id).await?;
         let agent_type = determine_agent_type(&goal.status)?;
 
-        // Check if an agent is already running for this goal
+        // 检查是否已经为该目标运行了代理
         {
             let tasks = self.tasks.read().await;
             if let Some(handle) = tasks.get(goal_id) {
@@ -59,21 +81,22 @@ impl AgentSupervisor {
             }
         }
 
+        // 创建取消令牌
         let cancel_token = tokio_util::sync::CancellationToken::new();
         let goal_id_owned = goal_id.to_string();
 
-        // Build goal context from DB (includes WorkSpace info)
+        // 从DB构建目标上下文（包含工作空间信息）
         let ctx = self.build_goal_context(&goal).await?;
 
-        // Create the appropriate agent
+        // 创建适当的代理
         let agent: Box<dyn SideCarAgent> = match agent_type {
-            AgentType::Summarizer => Box::new(GoalSummarizerAgent::new(cancel_token.clone())),
+            AgentType::Summarizer => Box::new(GoalSummarizerAgent::new(cancel_token.clone(), self.memory.clone())),
             AgentType::Builder => Box::new(BuilderAgent::new(cancel_token.clone())),
             AgentType::Executor => Box::new(ExecutorAgent::new(cancel_token.clone())),
             AgentType::Optimizer => Box::new(OptimizerAgent::new(cancel_token.clone())),
         };
 
-        // Register the task handle
+        // 注册任务 Handle 到 tasks
         let handle = AgentTaskHandle {
             agent_type: agent_type.clone(),
             cancel_token: cancel_token.clone(),
@@ -85,7 +108,7 @@ impl AgentSupervisor {
             tasks.insert(goal_id.to_string(), handle);
         }
 
-        // Update goal status
+        // 更新目标状态
         let new_status = match agent_type {
             AgentType::Summarizer => "summarizing",
             AgentType::Builder => "building",
@@ -96,7 +119,7 @@ impl AgentSupervisor {
         GoalsRepo::update_status(&self.db, goal_id, new_status).await?;
         self.emitter.emit_goal_status(goal_id, new_status, &previous_status);
 
-        // Spawn the agent task
+        // 启动代理任务
         let db = self.db.clone();
         let transport = self.transport.clone();
         let llm = self.llm.clone();
@@ -104,7 +127,7 @@ impl AgentSupervisor {
         let tasks = self.tasks.clone();
 
         tokio::spawn(async move {
-            // Update status to Running
+            // 更新状态为 Running
             {
                 let mut tasks_guard = tasks.write().await;
                 if let Some(h) = tasks_guard.get_mut(&goal_id_owned) {
@@ -112,9 +135,10 @@ impl AgentSupervisor {
                 }
             }
 
+            // 运行 Agent
             let result = agent.run(ctx, transport, llm, emitter.clone()).await;
 
-            // Handle result
+            // 处理结果
             match result {
                 Ok(output) => {
                     if let Err(e) = handle_agent_output(&db, &goal_id_owned, &output, &emitter).await {
@@ -209,6 +233,7 @@ impl AgentSupervisor {
             metadata: HashMap::new(),
             workspace_id,
             current_node_id,
+            memory: self.memory.clone(),
         })
     }
 }
