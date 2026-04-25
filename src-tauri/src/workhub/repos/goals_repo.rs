@@ -2,6 +2,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{AppError, AppResult};
 use super::super::types::*;
+use super::super::types::GoalStatus;
 
 /// Repository for Goal operations
 pub struct GoalsRepo;
@@ -73,11 +74,11 @@ impl GoalsRepo {
         Self::get_by_id(pool, id).await
     }
 
-    pub async fn update_status(pool: &SqlitePool, id: &str, status: &str) -> AppResult<Goal> {
+    pub async fn update_status(pool: &SqlitePool, id: &str, status: GoalStatus) -> AppResult<Goal> {
         let now = chrono::Utc::now().to_rfc3339();
 
         sqlx::query("UPDATE goals SET status = ?, updated_at = ? WHERE id = ?")
-            .bind(status)
+            .bind(status.to_string())
             .bind(&now)
             .bind(id)
             .execute(pool)

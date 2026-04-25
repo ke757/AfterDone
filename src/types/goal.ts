@@ -13,12 +13,11 @@ export interface Goal {
 
 export type GoalStatus =
   | 'draft'
-  | 'summarizing'
   | 'pinned'
-  | 'executing'
-  | 'achieved'
+  | 'building'
+  | 'reached'
   | 'optimizing'
-  | 'solidified'
+  | 'archived'
   | 'failed';
 
 export interface GoalSummary {

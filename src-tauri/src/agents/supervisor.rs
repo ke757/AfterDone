@@ -9,7 +9,7 @@ use crate::agents::OptimizerAgent;
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{AgentOutput, AgentStatus, AgentTaskHandle, GoalContext};
 use crate::adapter::Transport;
-use crate::workhub::{AgentType, GoalsRepo, MilestonesRepo, SkillsRepo, AgentLogsRepo};
+use crate::workhub::{AgentType, GoalsRepo, MilestonesRepo, SkillsRepo, AgentLogsRepo, GoalStatus};
 use crate::chat::MessagesRepo;
 use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
@@ -69,7 +69,7 @@ impl AgentSupervisor {
     /// - 维护 agent 运行时的状态变更
     pub async fn start_agent(&self, goal_id: &str) -> AppResult<AgentStatus> {
         let goal = GoalsRepo::get_by_id(&self.db, goal_id).await?;
-        let agent_type = determine_agent_type(&goal.status)?;
+        let agent_type = determine_agent_type(goal.status.clone())?;
 
         // 检查是否已经为该目标运行了代理
         {
@@ -110,14 +110,14 @@ impl AgentSupervisor {
 
         // 更新目标状态
         let new_status = match agent_type {
-            AgentType::Summarizer => "summarizing",
-            AgentType::Builder => "building",
-            AgentType::Executor => "executing",
-            AgentType::Optimizer => "optimizing",
+            AgentType::Summarizer => GoalStatus::Draft,
+            AgentType::Builder => GoalStatus::Building,
+            AgentType::Executor => GoalStatus::Building,
+            AgentType::Optimizer => GoalStatus::Optimizing,
         };
         let previous_status = goal.status.clone();
-        GoalsRepo::update_status(&self.db, goal_id, new_status).await?;
-        self.emitter.emit_goal_status(goal_id, new_status, &previous_status);
+        GoalsRepo::update_status(&self.db, goal_id, new_status.clone()).await?;
+        self.emitter.emit_goal_status(goal_id, &new_status.to_string(), &previous_status.to_string());
 
         // 启动代理任务
         let db = self.db.clone();
@@ -161,8 +161,8 @@ impl AgentSupervisor {
                         h.status = AgentStatus::Failed;
                     }
                     // Revert goal status on failure
-                    let _ = GoalsRepo::update_status(&db, &goal_id_owned, "failed").await;
-                    emitter.emit_goal_status(&goal_id_owned, "failed", new_status);
+                    let _ = GoalsRepo::update_status(&db, &goal_id_owned, GoalStatus::Failed).await;
+                    emitter.emit_goal_status(&goal_id_owned, &GoalStatus::Failed.to_string(), &new_status.to_string());
                 }
             }
         });
@@ -239,16 +239,16 @@ impl AgentSupervisor {
 }
 
 /// Determine which agent type should run based on goal status
-fn determine_agent_type(goal_status: &str) -> AppResult<AgentType> {
+fn determine_agent_type(goal_status: GoalStatus) -> AppResult<AgentType> {
     match goal_status {
-        "draft" => Ok(AgentType::Summarizer),
-        "pinned" => Ok(AgentType::Builder),      // Builder for initial achievement
-        "building" => Ok(AgentType::Builder),    // Resume building
-        "achieved" => Ok(AgentType::Optimizer),  // Optimize after achievement
-        "optimizing" => Ok(AgentType::Optimizer),// Resume optimization
-        "failed" => Ok(AgentType::Builder),      // Retry with Builder
-        s => Err(AppError::Agent(format!(
-            "No agent transition defined for goal status: {}", s
+        GoalStatus::Draft => Ok(AgentType::Summarizer),
+        GoalStatus::Pinned => Ok(AgentType::Builder),      // Builder for initial achievement
+        GoalStatus::Building => Ok(AgentType::Builder),    // Resume building
+        GoalStatus::Reached => Ok(AgentType::Optimizer),   // Optimize after reached
+        GoalStatus::Optimizing => Ok(AgentType::Optimizer),// Resume optimization
+        GoalStatus::Failed => Ok(AgentType::Builder),      // Retry with Builder
+        GoalStatus::Archived => Err(AppError::Agent(format!(
+            "No agent transition defined for goal status: archived"
         ))),
     }
 }
@@ -286,8 +286,8 @@ async fn handle_agent_output(
             }).await;
 
             // Transition back to draft so user can review and pin
-            GoalsRepo::update_status(db, goal_id, "draft").await?;
-            emitter.emit_goal_status(goal_id, "draft", "summarizing");
+            GoalsRepo::update_status(db, goal_id, GoalStatus::Draft).await?;
+            emitter.emit_goal_status(goal_id, &GoalStatus::Draft.to_string(), &GoalStatus::Draft.to_string());
 
             // Log the agent decision
             AgentLogsRepo::append(
@@ -305,9 +305,9 @@ async fn handle_agent_output(
             ..
         } => {
             if *success {
-                // Goal achieved
-                GoalsRepo::update_status(db, goal_id, "achieved").await?;
-                emitter.emit_goal_status(goal_id, "achieved", "building");
+                // Goal reached
+                GoalsRepo::update_status(db, goal_id, GoalStatus::Reached).await?;
+                emitter.emit_goal_status(goal_id, &GoalStatus::Reached.to_string(), &GoalStatus::Building.to_string());
 
                 // Update milestone status
                 if !milestone_id.is_empty() {
@@ -317,15 +317,15 @@ async fn handle_agent_output(
 
                 // Log the achievement
                 AgentLogsRepo::append(
-                    db, goal_id, "builder", "building", "achieved",
+                    db, goal_id, "builder", "building", "reached",
                     Some(&serde_json::json!({
                         "new_node_id": new_node_id,
                         "skills_used": skills_used,
                     }).to_string()),
                 ).await?;
             } else {
-                GoalsRepo::update_status(db, goal_id, "failed").await?;
-                emitter.emit_goal_status(goal_id, "failed", "building");
+                GoalsRepo::update_status(db, goal_id, GoalStatus::Failed).await?;
+                emitter.emit_goal_status(goal_id, &GoalStatus::Failed.to_string(), &GoalStatus::Building.to_string());
 
                 // Log the failure
                 AgentLogsRepo::append(
@@ -343,11 +343,11 @@ async fn handle_agent_output(
             ..
         } => {
             if *success {
-                GoalsRepo::update_status(db, goal_id, "achieved").await?;
-                emitter.emit_goal_status(goal_id, "achieved", "executing");
+                GoalsRepo::update_status(db, goal_id, GoalStatus::Reached).await?;
+                emitter.emit_goal_status(goal_id, &GoalStatus::Reached.to_string(), &GoalStatus::Building.to_string());
             } else {
-                GoalsRepo::update_status(db, goal_id, "failed").await?;
-                emitter.emit_goal_status(goal_id, "failed", "executing");
+                GoalsRepo::update_status(db, goal_id, GoalStatus::Failed).await?;
+                emitter.emit_goal_status(goal_id, &GoalStatus::Failed.to_string(), &GoalStatus::Building.to_string());
 
                 // If we have a current node, persist bugs
                 if !bugs_found.is_empty() {
@@ -370,11 +370,11 @@ async fn handle_agent_output(
             new_node_id,
         } => {
             if *solidified {
-                GoalsRepo::update_status(db, goal_id, "solidified").await?;
-                emitter.emit_goal_status(goal_id, "solidified", "optimizing");
+                GoalsRepo::update_status(db, goal_id, GoalStatus::Archived).await?;
+                emitter.emit_goal_status(goal_id, &GoalStatus::Archived.to_string(), &GoalStatus::Optimizing.to_string());
             } else {
-                GoalsRepo::update_status(db, goal_id, "achieved").await?;
-                emitter.emit_goal_status(goal_id, "achieved", "optimizing");
+                GoalsRepo::update_status(db, goal_id, GoalStatus::Reached).await?;
+                emitter.emit_goal_status(goal_id, &GoalStatus::Reached.to_string(), &GoalStatus::Optimizing.to_string());
             }
 
             if !milestone_id.is_empty() {

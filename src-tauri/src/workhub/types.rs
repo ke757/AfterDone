@@ -8,12 +8,11 @@ use sqlx::FromRow;
 #[serde(rename_all = "snake_case")]
 pub enum GoalStatus {
     Draft,
-    Summarizing,
     Pinned,
-    Executing,
-    Achieved,
+    Building,
+    Reached,
     Optimizing,
-    Solidified,
+    Archived,
     Failed,
 }
 
@@ -27,12 +26,11 @@ impl std::fmt::Display for GoalStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GoalStatus::Draft => write!(f, "draft"),
-            GoalStatus::Summarizing => write!(f, "summarizing"),
             GoalStatus::Pinned => write!(f, "pinned"),
-            GoalStatus::Executing => write!(f, "executing"),
-            GoalStatus::Achieved => write!(f, "achieved"),
+            GoalStatus::Building => write!(f, "building"),
+            GoalStatus::Reached => write!(f, "reached"),
             GoalStatus::Optimizing => write!(f, "optimizing"),
-            GoalStatus::Solidified => write!(f, "solidified"),
+            GoalStatus::Archived => write!(f, "archived"),
             GoalStatus::Failed => write!(f, "failed"),
         }
     }
@@ -43,12 +41,11 @@ impl TryFrom<&str> for GoalStatus {
     fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
         match s {
             "draft" => Ok(GoalStatus::Draft),
-            "summarizing" => Ok(GoalStatus::Summarizing),
             "pinned" => Ok(GoalStatus::Pinned),
-            "executing" => Ok(GoalStatus::Executing),
-            "achieved" => Ok(GoalStatus::Achieved),
+            "building" => Ok(GoalStatus::Building),
+            "reached" => Ok(GoalStatus::Reached),
             "optimizing" => Ok(GoalStatus::Optimizing),
-            "solidified" => Ok(GoalStatus::Solidified),
+            "archived" => Ok(GoalStatus::Archived),
             "failed" => Ok(GoalStatus::Failed),
             _ => Err(format!("Unknown goal status: {}", s)),
         }
@@ -62,7 +59,7 @@ pub struct Goal {
     pub title: String,
     pub summary: Option<String>,
     pub raw_input: String,
-    pub status: String,
+    pub status: GoalStatus,
     pub parent_goal_id: Option<String>,
     pub fork_context: Option<String>,
     pub current_milestone_id: Option<String>,

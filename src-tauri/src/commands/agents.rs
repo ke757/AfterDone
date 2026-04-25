@@ -22,10 +22,12 @@ pub struct AgentStatusResponse {
 /// Start an agent for a goal
 /// 
 /// The agent type is determined by the goal's current status:
-/// - "new" or "pending" -> Summarizer (to create summary)
+/// - "draft" -> Summarizer (to create summary)
 /// - "pinned" -> Builder (to build initial implementation)
-/// - "in_progress" -> Executor (to execute tasks)
-/// - "achieved" -> Optimizer (to optimize and solidify)
+/// - "building" -> Builder (to resume building)
+/// - "reached" -> Optimizer (to optimize and archive)
+/// - "optimizing" -> Optimizer (to resume optimization)
+/// - "failed" -> Builder (to retry building)
 #[tauri::command]
 pub async fn agents_start(
     state: State<'_, AppState>,

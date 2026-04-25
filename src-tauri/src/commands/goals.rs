@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::workhub::{CreateGoalInput, Goal, UpdateGoalInput, GoalsRepo};
+use crate::workhub::{CreateGoalInput, Goal, UpdateGoalInput, GoalsRepo, GoalStatus};
 use crate::error::AppResult;
 use crate::state::AppState;
 
@@ -45,7 +45,7 @@ pub async fn goals_pin(
     goal_id: String,
 ) -> AppResult<Goal> {
     let previous = GoalsRepo::get_by_id(&state.db, &goal_id).await?;
-    let goal = GoalsRepo::update_status(&state.db, &goal_id, "pinned").await?;
+    let goal = GoalsRepo::update_status(&state.db, &goal_id, GoalStatus::Pinned).await?;
 
     // TODO: Trigger Executor agent via supervisor
 
