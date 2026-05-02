@@ -15,7 +15,7 @@ use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
-use crate::memory::{ChatMemory, InMemoryChatMemory};
+use crate::session::{ChatMemory, InMemoryChatMemory};
 use crate::workhub::WorkHub;
 
 /// The AgentSupervisor is the central coordinator(调度器).

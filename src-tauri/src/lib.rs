@@ -8,8 +8,7 @@ mod events;
 mod state;
 mod commands;
 mod workhub;
-mod chat;
-mod memory;
+mod session;
 
 use state::AppState;
 use tauri::Manager;
@@ -42,11 +41,12 @@ pub fn run() {
                 .expect("Failed to initialize database");
 
             // Get app handle for EventBridge
+            // for Streamly
             let app_handle = app.handle().clone();
             let state = AppState::new(db, config, app_handle);
             app.manage(state);
 
-            tracing::info!("RigYourGoal initialized successfully");
+            tracing::info!("App initialized successfully");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -56,7 +56,6 @@ pub fn run() {
             commands::goals::goals_pin,
             commands::goals::goals_update,
             commands::goals::goals_delete,
-            commands::goals::goals_tree,
             commands::milestones::milestones_list,
             commands::milestones::milestones_get,
             commands::milestones::milestones_fork,
@@ -73,8 +72,6 @@ pub fn run() {
             commands::config_cmd::config_set_llm,
             commands::config_cmd::config_test_openclaw,
             commands::config_cmd::config_test_llm,
-            commands::chat::chat_send,
-            commands::chat::chat_history,
             // WorkSpace & WorkNode commands
             commands::workhub_cmd::workspace_init,
             commands::workhub_cmd::workspace_list,

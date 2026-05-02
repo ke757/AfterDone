@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::workhub::{AgentType, Goal, Milestone, Skill, AgentLog};
 use crate::chat::Message;
-use crate::memory::ChatMemory;
+use crate::session::ChatMemory;
 
 /// Context passed to any agent on each run.
 /// Constructed by AgentSupervisor from the database before spawning.

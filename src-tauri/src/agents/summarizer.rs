@@ -10,7 +10,7 @@ use crate::workhub::{AgentType, GoalSummary};
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::{LlmProvider, PromptTemplate};
-use crate::memory::ChatMemory;
+use crate::session::ChatMemory;
 
 /// Goal Summarization Agent.
 /// Supports multi-turn conversation: each invocation appends user input
