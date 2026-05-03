@@ -1,72 +1,37 @@
-//! Memory Module
+//! Session Module — 重构后的会话系统
 //!
-//! In-memory chat memory using rig-core's `Message` type.
-//! Supports multi-turn conversations per goal, allowing agents
-//! to carry context across successive invocations.
+//! 两种会话模式:
+//! - InMemorySession: Summarizer 临时内存会话（不持久化）
+//! - NodeSession: Builder/Executor/Optimizer 关联 WorkNode 的持久化会话（JSONL）
+//!
+//! 参考 OpenClaw 的 session 设计: 每 node 独立会话, JSONL 持久化
 
-mod store;
+pub mod types;
+pub mod store;
+pub mod jsonl_store;
+pub mod manager;
 
-pub use store::InMemoryChatMemory;
+use async_trait::async_trait;
 
-use rig::completion::message::Message;
-use crate::chat::Message as DbMessage;
+pub use types::Message;
+pub use manager::SessionManager;
 
-/// Trait for agent memory — stores conversation history per goal.
-pub trait ChatMemory: Send + Sync {
-    /// Add a message to the conversation memory for the given goal.
-    fn add_message(&self, goal_id: &str, message: Message);
+/// Session trait — Agent 对话会话接口
+///
+/// 替代旧的 ChatMemory trait。
+/// 会话在创建时绑定 scope（workspace_id 或 node_id），
+/// 因此方法签名中不再需要 goal_id 参数。
+#[async_trait]
+pub trait Session: Send + Sync {
+    /// 添加一条消息到会话
+    async fn add_message(&self, role: &str, content: &str, agent_type: &str);
 
-    /// Get the full conversation history for a goal.
-    fn get_history(&self, goal_id: &str) -> Vec<Message>;
+    /// 获取完整会话历史
+    fn get_history(&self) -> Vec<Message>;
 
-    /// Clear conversation history for a goal.
-    fn clear(&self, goal_id: &str);
+    /// 消息数量
+    fn message_count(&self) -> usize;
 
-    /// Check if memory exists for a goal.
-    fn has_history(&self, goal_id: &str) -> bool;
-
-    /// Number of messages stored for a goal.
-    fn message_count(&self, goal_id: &str) -> usize;
-
-    /// Convert rig Message history to DB-compatible Message context
-    /// for use with the LlmProvider interface.
-    fn to_db_context(&self, goal_id: &str, goal_id_for_db: &str) -> Vec<DbMessage>;
-}
-
-/// Convert a rig-core `Message` into the role string used by our DB `Message`.
-fn rig_message_to_db(msg: &Message, goal_id: &str) -> DbMessage {
-    let (role, content) = match msg {
-        Message::System { content } => ("system".to_string(), content.clone()),
-        Message::User { content: inner } => {
-            let text = inner
-                .iter()
-                .filter_map(|c| match c {
-                    rig::completion::message::UserContent::Text(t) => Some(t.text.clone()),
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            ("user".to_string(), text)
-        }
-        Message::Assistant { content: inner, .. } => {
-            let text = inner
-                .iter()
-                .filter_map(|c| match c {
-                    rig::completion::message::AssistantContent::Text(t) => Some(t.text.clone()),
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            ("assistant".to_string(), text)
-        }
-    };
-
-    DbMessage {
-        id: uuid::Uuid::new_v4().to_string(),
-        goal_id: goal_id.to_string(),
-        role,
-        content,
-        metadata: None,
-        created_at: chrono::Utc::now().to_rfc3339(),
-    }
+    /// 清空会话
+    async fn clear(&self);
 }

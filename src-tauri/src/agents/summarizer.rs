@@ -1,8 +1,6 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 
-use rig::completion::message::Message as RigMessage;
-
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{AgentOutput, GoalContext};
 use crate::adapter::Transport;
@@ -10,20 +8,18 @@ use crate::workhub::{AgentType, GoalSummary};
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::{LlmProvider, PromptTemplate};
-use crate::session::ChatMemory;
 
 /// Goal Summarization Agent.
 /// Supports multi-turn conversation: each invocation appends user input
-/// to the goal's memory, and the LLM receives the full conversation
+/// to the goal's session, and the LLM receives the full conversation
 /// history so it can refine the summary incrementally.
 pub struct GoalSummarizerAgent {
     cancel_token: tokio_util::sync::CancellationToken,
-    memory: Arc<dyn ChatMemory>,
 }
 
 impl GoalSummarizerAgent {
-    pub fn new(cancel_token: tokio_util::sync::CancellationToken, memory: Arc<dyn ChatMemory>) -> Self {
-        Self { cancel_token, memory }
+    pub fn new(cancel_token: tokio_util::sync::CancellationToken) -> Self {
+        Self { cancel_token }
     }
 }
 
@@ -44,26 +40,22 @@ impl SideCarAgent for GoalSummarizerAgent {
 
         emitter.emit_agent_status(workspace_id, "summarizer", "running", "summarizing");
 
-        // ... user message ...
-        self.memory.add_message(
-            workspace_id,
-            RigMessage::user(&ctx.goal.raw_input),
-        );
+        // 记录用户输入到 session
+        ctx.session.add_message("user", &ctx.goal.raw_input, "summarizer").await;
 
-        // ...
-        let history = self.memory.get_history(workspace_id);
-        let context = self.memory.to_db_context(workspace_id, workspace_id);
+        let history = ctx.session.get_history();
+        let msg_count = ctx.session.message_count();
 
         let system_prompt = PromptTemplate::system_prompt(&AgentType::Summarizer);
 
         // If there's prior history (multi-turn), include a refinement instruction
-        let user_prompt = if history.len() > 1 {
+        let user_prompt = if msg_count > 1 {
             format!(
                 "[Conversation history shows {} prior exchanges.]\n\n\
                  Latest user input:\n{}\n\n\
                  Please update the goal summary considering all previous context. \
                  Incorporate the new information while preserving the structure.",
-                history.len() - 1,
+                msg_count - 1,
                 ctx.goal.raw_input,
             )
         } else {
@@ -72,16 +64,16 @@ impl SideCarAgent for GoalSummarizerAgent {
                 ctx.goal.raw_input,
             )
         };
-        
+
         // 使用流式处理向前端展示进度
-        let mut stream = llm.stream(system_prompt, &user_prompt, &context).await?;
+        let mut stream = llm.stream(system_prompt, &user_prompt, &history).await?;
         let mut full_response = String::new();
 
         use futures::StreamExt;
         while let Some(chunk) = stream.next().await {
             if self.cancel_token.is_cancelled() {
                 emitter.emit_agent_status(workspace_id, "summarizer", "canceled", "summarizing");
-                self.memory.clear(workspace_id);
+                ctx.session.clear().await;
                 return Err(AppError::Agent("Summarizer was canceled".to_string()));
             }
 
@@ -102,11 +94,8 @@ impl SideCarAgent for GoalSummarizerAgent {
             }
         }
 
-        // Store assistant response in memory for future turns
-        self.memory.add_message(
-            workspace_id,
-            RigMessage::assistant(&full_response),
-        );
+        // 记录 assistant 响应到 session
+        ctx.session.add_message("assistant", &full_response, "summarizer").await;
 
         let summary = parse_summary_response(&full_response)?;
 
@@ -135,6 +124,7 @@ impl SideCarAgent for GoalSummarizerAgent {
 
 /// Parse the LLM response into a GoalSummary.
 fn parse_summary_response(response: &str) -> AppResult<GoalSummary> {
+    // 将大型语言模型（LLM）的响应解析为 GoalSummary。
     // 尝试从响应中提取JSON（可能被包裹在Markdown代码块中）
     let json_str = extract_json(response);
 
@@ -154,6 +144,7 @@ fn parse_summary_response(response: &str) -> AppResult<GoalSummary> {
 
 /// Extract JSON from a potentially markdown-wrapped response
 fn extract_json(text: &str) -> String {
+    // 从可能被Markdown包裹的响应中提取JSON
     let trimmed = text.trim();
 
     // 检查是否包含Markdown代码块换行

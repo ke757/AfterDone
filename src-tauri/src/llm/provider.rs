@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use futures::Stream;
 
-use crate::chat::Message;
+use crate::session::Message;
 use crate::error::AppResult;
 
 /// A streaming chunk from the LLM

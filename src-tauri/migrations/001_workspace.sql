@@ -53,17 +53,6 @@ CREATE TABLE IF NOT EXISTS skills (
     FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE
 );
 
--- Messages table: conversation history per goal
-CREATE TABLE IF NOT EXISTS messages (
-    id TEXT PRIMARY KEY NOT NULL,
-    goal_id TEXT NOT NULL,
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    metadata TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE
-);
-
 -- Agent logs table: append-only log of agent activity
 CREATE TABLE IF NOT EXISTS agent_logs (
     id TEXT PRIMARY KEY NOT NULL,
@@ -148,7 +137,6 @@ CREATE INDEX IF NOT EXISTS idx_goals_parent ON goals(parent_goal_id);
 CREATE INDEX IF NOT EXISTS idx_milestones_goal ON milestones(goal_id);
 CREATE INDEX IF NOT EXISTS idx_milestones_parent ON milestones(parent_milestone_id);
 CREATE INDEX IF NOT EXISTS idx_skills_milestone ON skills(milestone_id);
-CREATE INDEX IF NOT EXISTS idx_messages_goal_created ON messages(goal_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_agent_logs_goal ON agent_logs(goal_id, created_at);
 
 -- Indexes

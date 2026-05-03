@@ -89,6 +89,7 @@ pub fn run() {
             commands::workhub_cmd::worknode_get_user_manual,
             commands::workhub_cmd::worknode_goal_achieved,
             commands::workhub_cmd::worknode_achieved,
+            commands::sessions::sessions_get_node,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

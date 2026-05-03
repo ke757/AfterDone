@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::workhub::{AgentType, Goal, Milestone, Skill, AgentLog};
-use crate::chat::Message;
-use crate::session::ChatMemory;
+use crate::session::Session;
 
 /// Context passed to any agent on each run.
 /// Constructed by AgentSupervisor from the database before spawning.
@@ -12,7 +11,6 @@ use crate::session::ChatMemory;
 pub struct GoalContext {
     pub goal: Goal,
     pub current_milestone: Option<Milestone>,
-    pub conversation_history: Vec<Message>,
     pub available_skills: Vec<Skill>,
     pub agent_logs: Vec<AgentLog>,
     pub metadata: HashMap<String, serde_json::Value>,
@@ -20,8 +18,8 @@ pub struct GoalContext {
     pub workspace_id: Option<String>,
     /// Current WorkNode ID (if any)
     pub current_node_id: Option<String>,
-    /// In-memory chat memory keyed by goal_id for multi-turn conversations
-    pub memory: Arc<dyn ChatMemory>,
+    /// Agent session — records conversation history per scope
+    pub session: Arc<dyn Session>,
 }
 
 /// Output from an agent run

@@ -15,7 +15,7 @@ use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
-use crate::session::{ChatMemory, InMemoryChatMemory};
+use crate::session::SessionManager;
 use crate::workhub::WorkHub;
 
 /// The AgentSupervisor is the central coordinator(调度器).
@@ -26,7 +26,7 @@ pub struct AgentSupervisor {
     llm: Arc<dyn LlmProvider>,
     emitter: EventBridge,
     tasks: Arc<RwLock<HashMap<String, AgentTaskHandle>>>,
-    memory: Arc<dyn ChatMemory>,
+    sessions: Arc<SessionManager>,
 }
 
 impl AgentSupervisor {
@@ -35,6 +35,7 @@ impl AgentSupervisor {
         transport: Arc<dyn Transport>,
         llm: Arc<dyn LlmProvider>,
         emitter: EventBridge,
+        sessions: Arc<SessionManager>,
     ) -> Self {
         Self {
             db,
@@ -42,26 +43,13 @@ impl AgentSupervisor {
             llm,
             emitter,
             tasks: Arc::new(RwLock::new(HashMap::new())),
-            memory: Arc::new(InMemoryChatMemory::new()),
+            sessions,
         }
     }
 
-    /// 创建一个带有自定义内存的AgentSupervisor.
-    pub fn with_memory(
-        db: DatabasePool,
-        transport: Arc<dyn Transport>,
-        llm: Arc<dyn LlmProvider>,
-        emitter: EventBridge,
-        memory: Arc<dyn ChatMemory>,
-    ) -> Self {
-        Self {
-            db,
-            transport,
-            llm,
-            emitter,
-            tasks: Arc::new(RwLock::new(HashMap::new())),
-            memory,
-        }
+    /// sessions accessor for Tauri commands
+    pub fn sessions(&self) -> &Arc<SessionManager> {
+        &self.sessions
     }
 
     /// 为给定的工作空间启动一个代理.
@@ -92,7 +80,7 @@ impl AgentSupervisor {
 
         // 创建适当的代理
         let agent: Box<dyn SideCarAgent> = match agent_type {
-            AgentType::Summarizer => Box::new(GoalSummarizerAgent::new(cancel_token.clone(), self.memory.clone())),
+            AgentType::Summarizer => Box::new(GoalSummarizerAgent::new(cancel_token.clone())),
             AgentType::Builder => Box::new(BuilderAgent::new(cancel_token.clone())),
             AgentType::Executor => Box::new(ExecutorAgent::new(cancel_token.clone())),
             AgentType::Optimizer => Box::new(OptimizerAgent::new(cancel_token.clone())),
@@ -141,7 +129,7 @@ impl AgentSupervisor {
             // 运行 Agent
             let result = agent.run(ctx, transport, llm, emitter.clone()).await;
 
-            // 处理结果
+            // 处理结果，将 Agent 的工作成果持久化到数据库并更新相关状态：
             match result {
                 Ok(output) => {
                     if let Err(e) = handle_agent_output(&db, &goal_id_owned, &output, &emitter).await {
@@ -207,12 +195,6 @@ impl AgentSupervisor {
             None => None,
         };
 
-        let conversation_history = MessagesRepo::list_by_goal(&self.db, &goal.id, None, None)
-            .await?
-            .into_iter()
-            .rev() // Reverse to chronological order
-            .collect();
-
         let available_skills = match &current_milestone {
             Some(m) => SkillsRepo::list_by_milestone(&self.db, &m.id).await?,
             None => vec![],
@@ -227,16 +209,24 @@ impl AgentSupervisor {
             None => (None, None),
         };
 
+        // Resolve the appropriate session
+        // Summarizer gets temp in-memory session; others get node-persisted session
+        let session = if let Some(ref node_id) = current_node_id {
+            self.sessions.get_or_create_node(node_id)?
+        } else {
+            // Fallback: temp session via workspace_id (for Summarizer before node exists)
+            self.sessions.get_or_create_temp(workspace_id.as_deref().unwrap_or(&goal.id)).await
+        };
+
         Ok(GoalContext {
             goal: goal.clone(),
             current_milestone,
-            conversation_history,
             available_skills,
             agent_logs,
             metadata: HashMap::new(),
             workspace_id,
             current_node_id,
-            memory: self.memory.clone(),
+            session,
         })
     }
 }

@@ -16,8 +16,8 @@ use crate::adapter::generator::{
     ExecuteParams, ExecuteResponse, StatusParams, StatusResponse,
     METHOD_EXECUTE, METHOD_STATUS,
 };
+use crate::session::Message;
 use crate::workhub::AgentType;
-use crate::chat::Message;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
@@ -65,10 +65,11 @@ impl BuilderAgent {
 
         // Analyze the goal
         let prompt = self.build_analysis_prompt(ctx, &existing_conclusion);
+        let history = ctx.session.get_history();
         let response = llm.complete(
             "You are a goal planning agent that creates detailed plans.",
             &prompt,
-            &ctx.conversation_history,
+            &history,
         ).await?;
 
         // Parse the plan
@@ -139,7 +140,7 @@ impl BuilderAgent {
         let result = self.wait_for_completion(transport, &task_id, wid, emitter).await?;
 
         // Optionally, use LLM to enhance the result
-        let enhanced_result = self.enhance_generator_result(&result, llm, &ctx.conversation_history).await?;
+        let enhanced_result = self.enhance_generator_result(&result, llm, &ctx.session.get_history()).await?;
 
         Ok(enhanced_result)
     }
@@ -312,7 +313,7 @@ impl BuilderAgent {
         let _response = llm.complete(
             "You are a verification agent.",
             &verify_prompt,
-            &ctx.conversation_history,
+            &ctx.session.get_history(),
         ).await?;
 
         Ok(VerificationResult {

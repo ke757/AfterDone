@@ -8,6 +8,7 @@ use crate::config::AppConfig;
 use crate::db::DatabasePool;
 use crate::events::EventBridge;
 use crate::llm::{LlmProvider, RigProvider};
+use crate::session::SessionManager;
 
 /// Application state shared across all Tauri commands.
 /// Wrapped in Arc<RwLock<>> for safe concurrent access.
@@ -15,6 +16,7 @@ pub struct AppState {
     pub db: DatabasePool,
     pub config: Arc<RwLock<AppConfig>>,
     pub supervisor: Arc<AgentSupervisor>,
+    pub sessions: Arc<SessionManager>,
 }
 
 impl AppState {
@@ -32,18 +34,23 @@ impl AppState {
         // Create LLM provider
         let llm: Arc<dyn LlmProvider> = Arc::new(RigProvider::new(config.llm.clone()));
 
+        // Create session manager
+        let sessions = Arc::new(SessionManager::new());
+
         // Create agent supervisor
         let supervisor = Arc::new(AgentSupervisor::new(
             db.clone(),
             transport,
             llm,
             emitter,
+            sessions.clone(),
         ));
 
         Self {
             db,
             config: Arc::new(RwLock::new(config)),
             supervisor,
+            sessions,
         }
     }
 }
