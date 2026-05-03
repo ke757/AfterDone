@@ -53,8 +53,9 @@ impl BuilderAgent {
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
     ) -> AppResult<PlanResult> {
+        let wid = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             "Starting initial analysis...\n",
             false,
         );
@@ -74,7 +75,7 @@ impl BuilderAgent {
         let plan = self.parse_plan(&response)?;
 
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             &format!("Plan created with {} modules\n", plan.modules.len()),
             false,
         );
@@ -91,8 +92,9 @@ impl BuilderAgent {
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
     ) -> AppResult<GeneratorTaskResult> {
+        let wid = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             "Creating specification for generator...\n",
             false,
         );
@@ -128,13 +130,13 @@ impl BuilderAgent {
         }
 
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             &format!("Task {} accepted, waiting for completion...\n", task_id),
             false,
         );
 
         // Poll for completion
-        let result = self.wait_for_completion(transport, &task_id, &ctx.goal.id, emitter).await?;
+        let result = self.wait_for_completion(transport, &task_id, wid, emitter).await?;
 
         // Optionally, use LLM to enhance the result
         let enhanced_result = self.enhance_generator_result(&result, llm, &ctx.conversation_history).await?;
@@ -147,7 +149,7 @@ impl BuilderAgent {
         &self,
         transport: &Arc<dyn Transport>,
         task_id: &str,
-        goal_id: &str,
+        workspace_id: &str,
         emitter: &EventBridge,
     ) -> AppResult<GeneratorTaskResult> {
         let mut attempts = 0u32;
@@ -175,7 +177,7 @@ impl BuilderAgent {
             match status.status {
                 crate::adapter::generator::GeneratorTaskStatus::Completed => {
                     emitter.emit_agent_stream(
-                        goal_id,
+                        workspace_id,
                         "Generator task completed successfully\n",
                         false,
                     );
@@ -196,7 +198,7 @@ impl BuilderAgent {
                 crate::adapter::generator::GeneratorTaskStatus::Failed => {
                     let error = status.error.unwrap_or_else(|| "Unknown error".to_string());
                     emitter.emit_agent_stream(
-                        goal_id,
+                        workspace_id,
                         &format!("Generator task failed: {}\n", error),
                         false,
                     );
@@ -213,7 +215,7 @@ impl BuilderAgent {
                 crate::adapter::generator::GeneratorTaskStatus::Running => {
                     if let Some(step) = &status.current_step {
                         emitter.emit_agent_stream(
-                            goal_id,
+                            workspace_id,
                             &format!("[{}%] {}\n", status.progress, step),
                             false,
                         );
@@ -270,8 +272,9 @@ impl BuilderAgent {
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
     ) -> AppResult<VerificationResult> {
+        let wid = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             "Verifying generator result...\n",
             false,
         );
@@ -287,7 +290,7 @@ impl BuilderAgent {
         // Check user manual exists
         if generator_result.user_manual.is_none() {
             emitter.emit_agent_stream(
-                &ctx.goal.id,
+                wid,
                 "Warning: No user manual provided by generator\n",
                 false,
             );
@@ -295,7 +298,7 @@ impl BuilderAgent {
 
         // Run executor for testing
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             "Running execution agent for verification...\n",
             false,
         );
@@ -326,9 +329,10 @@ impl BuilderAgent {
         attempt: u32,
         emitter: &EventBridge,
     ) -> AppResult<ConclusionResult> {
+        let wid = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
         if verification.passed {
             emitter.emit_agent_stream(
-                &ctx.goal.id,
+                wid,
                 "Goal achieved! Creating conclusion...\n",
                 true,
             );
@@ -346,7 +350,7 @@ impl BuilderAgent {
 
         if attempt >= self.max_retries {
             emitter.emit_agent_stream(
-                &ctx.goal.id,
+                wid,
                 &format!("Max retries ({}) reached, marking as failed\n", self.max_retries),
                 true,
             );
@@ -359,7 +363,7 @@ impl BuilderAgent {
         }
 
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             &format!("Attempt {}/{} failed, will retry\n", attempt, self.max_retries),
             false,
         );

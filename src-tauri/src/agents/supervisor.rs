@@ -10,7 +10,7 @@ use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{AgentOutput, AgentStatus, AgentTaskHandle, GoalContext};
 use crate::adapter::Transport;
 use crate::workhub::{AgentType, GoalsRepo, MilestonesRepo, SkillsRepo, AgentLogsRepo, GoalStatus};
-use crate::chat::MessagesRepo;
+use crate::workhub::{WorkSpaceRepo};
 use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
@@ -64,17 +64,18 @@ impl AgentSupervisor {
         }
     }
 
-    /// 为给定的目标启动一个代理.
-    /// - 根据当前目标状态确定代理类型.
+    /// 为给定的工作空间启动一个代理.
+    /// - 根据对应目标状态确定代理类型.
     /// - 维护 agent 运行时的状态变更
-    pub async fn start_agent(&self, goal_id: &str) -> AppResult<AgentStatus> {
-        let goal = GoalsRepo::get_by_id(&self.db, goal_id).await?;
+    pub async fn start_agent(&self, workspace_id: &str) -> AppResult<AgentStatus> {
+        let workspace = WorkSpaceRepo::get_by_id(&self.db, workspace_id).await?;
+        let goal = GoalsRepo::get_by_id(&self.db, &workspace.goal_id).await?;
         let agent_type = determine_agent_type(goal.status.clone())?;
 
-        // 检查是否已经为该目标运行了代理
+        // 检查是否已经为该工作空间运行了代理
         {
             let tasks = self.tasks.read().await;
-            if let Some(handle) = tasks.get(goal_id) {
+            if let Some(handle) = tasks.get(workspace_id) {
                 if handle.status == AgentStatus::Running || handle.status == AgentStatus::Starting {
                     return Ok(handle.status.clone());
                 }
@@ -83,7 +84,8 @@ impl AgentSupervisor {
 
         // 创建取消令牌
         let cancel_token = tokio_util::sync::CancellationToken::new();
-        let goal_id_owned = goal_id.to_string();
+        let workspace_id_owned = workspace_id.to_string();
+        let goal_id_owned = goal.id.clone();
 
         // 从DB构建目标上下文（包含工作空间信息）
         let ctx = self.build_goal_context(&goal).await?;
@@ -105,7 +107,7 @@ impl AgentSupervisor {
         };
         {
             let mut tasks = self.tasks.write().await;
-            tasks.insert(goal_id.to_string(), handle);
+            tasks.insert(workspace_id.to_string(), handle);
         }
 
         // 更新目标状态
@@ -116,8 +118,8 @@ impl AgentSupervisor {
             AgentType::Optimizer => GoalStatus::Optimizing,
         };
         let previous_status = goal.status.clone();
-        GoalsRepo::update_status(&self.db, goal_id, new_status.clone()).await?;
-        self.emitter.emit_goal_status(goal_id, &new_status.to_string(), &previous_status.to_string());
+        GoalsRepo::update_status(&self.db, &goal.id, new_status.clone()).await?;
+        self.emitter.emit_goal_status(&goal.id, &new_status.to_string(), &previous_status.to_string());
 
         // 启动代理任务
         let db = self.db.clone();
@@ -125,12 +127,13 @@ impl AgentSupervisor {
         let llm = self.llm.clone();
         let emitter = self.emitter.clone();
         let tasks = self.tasks.clone();
+        let workspace_id_tasks = workspace_id_owned.clone();
 
         tokio::spawn(async move {
             // 更新状态为 Running
             {
                 let mut tasks_guard = tasks.write().await;
-                if let Some(h) = tasks_guard.get_mut(&goal_id_owned) {
+                if let Some(h) = tasks_guard.get_mut(&workspace_id_tasks) {
                     h.status = AgentStatus::Running;
                 }
             }
@@ -144,20 +147,20 @@ impl AgentSupervisor {
                     if let Err(e) = handle_agent_output(&db, &goal_id_owned, &output, &emitter).await {
                         tracing::error!("Failed to handle agent output: {}", e);
                         let mut tasks_guard = tasks.write().await;
-                        if let Some(h) = tasks_guard.get_mut(&goal_id_owned) {
+                        if let Some(h) = tasks_guard.get_mut(&workspace_id_tasks) {
                             h.status = AgentStatus::Failed;
                         }
                     } else {
                         let mut tasks_guard = tasks.write().await;
-                        if let Some(h) = tasks_guard.get_mut(&goal_id_owned) {
+                        if let Some(h) = tasks_guard.get_mut(&workspace_id_tasks) {
                             h.status = AgentStatus::Completed;
                         }
                     }
                 }
                 Err(e) => {
-                    tracing::error!("Agent failed for goal {}: {}", goal_id_owned, e);
+                    tracing::error!("Agent failed for workspace {} (goal {}): {}", workspace_id_tasks, goal_id_owned, e);
                     let mut tasks_guard = tasks.write().await;
-                    if let Some(h) = tasks_guard.get_mut(&goal_id_owned) {
+                    if let Some(h) = tasks_guard.get_mut(&workspace_id_tasks) {
                         h.status = AgentStatus::Failed;
                     }
                     // Revert goal status on failure
@@ -170,22 +173,22 @@ impl AgentSupervisor {
         Ok(AgentStatus::Starting)
     }
 
-    /// Stop the agent running for a goal
-    pub async fn stop_agent(&self, goal_id: &str) -> AppResult<AgentStatus> {
+    /// Stop the agent running for a workspace
+    pub async fn stop_agent(&self, workspace_id: &str) -> AppResult<AgentStatus> {
         let mut tasks = self.tasks.write().await;
-        if let Some(handle) = tasks.get_mut(goal_id) {
+        if let Some(handle) = tasks.get_mut(workspace_id) {
             handle.cancel_token.cancel();
             handle.status = AgentStatus::Canceling;
             Ok(handle.status.clone())
         } else {
-            Err(AppError::NotFound(format!("No running agent for goal: {}", goal_id)))
+            Err(AppError::NotFound(format!("No running agent for workspace: {}", workspace_id)))
         }
     }
 
-    /// Get the status of the agent for a goal
-    pub async fn get_status(&self, goal_id: &str) -> Option<AgentStatus> {
+    /// Get the status of the agent for a workspace
+    pub async fn get_status(&self, workspace_id: &str) -> Option<AgentStatus> {
         let tasks = self.tasks.read().await;
-        tasks.get(goal_id).map(|h| h.status.clone())
+        tasks.get(workspace_id).map(|h| h.status.clone())
     }
 
     /// Get all running agents

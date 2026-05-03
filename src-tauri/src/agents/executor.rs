@@ -43,13 +43,13 @@ impl ExecutorAgent {
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
     ) -> AppResult<ExecutionResult> {
-        // Get current worknode's user_manual
+        let wid = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
         let user_manual = self.get_user_manual(ctx).await?;
         let skills = &ctx.available_skills;
 
         if skills.is_empty() {
             emitter.emit_agent_stream(
-                &ctx.goal.id,
+                wid,
                 "No skills available for execution\n",
                 false,
             );
@@ -61,7 +61,7 @@ impl ExecutorAgent {
         }
 
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             &format!("Starting execution with {} skills\n", skills.len()),
             false,
         );
@@ -92,7 +92,7 @@ impl ExecutorAgent {
             match action {
                 ExecutionAction::ExecuteSkill { skill_name, params } => {
                     emitter.emit_agent_stream(
-                        &ctx.goal.id,
+                        wid,
                         &format!("Executing skill: {} with params: {:?}\n", skill_name, params),
                         false,
                     );
@@ -104,7 +104,7 @@ impl ExecutorAgent {
                         Ok(output) => {
                             state.record_success(&skill_name, &output);
                             emitter.emit_agent_stream(
-                                &ctx.goal.id,
+                                wid,
                                 &format!("Skill {} executed successfully\n", skill_name),
                                 false,
                             );
@@ -120,7 +120,7 @@ impl ExecutorAgent {
                             bugs.push(bug);
 
                             emitter.emit_agent_stream(
-                                &ctx.goal.id,
+                                wid,
                                 &format!("Skill {} failed: {}\n", skill_name, error_msg),
                                 false,
                             );
@@ -130,7 +130,7 @@ impl ExecutorAgent {
 
                 ExecutionAction::ReportSuccess { summary } => {
                     emitter.emit_agent_stream(
-                        &ctx.goal.id,
+                        wid,
                         &format!("Execution complete: {}\n", summary),
                         true,
                     );
@@ -143,7 +143,7 @@ impl ExecutorAgent {
 
                 ExecutionAction::ReportFailure { reason } => {
                     emitter.emit_agent_stream(
-                        &ctx.goal.id,
+                        wid,
                         &format!("Execution failed: {}\n", reason),
                         true,
                     );
@@ -158,7 +158,7 @@ impl ExecutorAgent {
             // Check if we've made progress
             if iteration > 0 && iteration % 10 == 0 {
                 emitter.emit_agent_stream(
-                    &ctx.goal.id,
+                    wid,
                     &format!("Execution iteration {}/{}\n", iteration, self.max_iterations),
                     false,
                 );
@@ -290,6 +290,7 @@ impl SideCarAgent for ExecutorAgent {
         llm: Arc<dyn LlmProvider>,
         emitter: EventBridge,
     ) -> AppResult<AgentOutput> {
+        let wid = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
         let result = self.execute(&ctx, &llm, &emitter).await?;
 
         // If execution failed and we have a current node, add bugs
@@ -297,7 +298,7 @@ impl SideCarAgent for ExecutorAgent {
             // In a real implementation, we would persist bugs to the worknode
             // using WorkHub::add_node_bug
             emitter.emit_agent_stream(
-                &ctx.goal.id,
+                wid,
                 &format!("Logged {} bugs\n", result.bugs.len()),
                 false,
             );

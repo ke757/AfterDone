@@ -1,6 +1,6 @@
 /**
  * Agent Store
- * 管理 Agent 状态
+ * ... Agent ...
  */
 import { create } from 'zustand';
 import type { AgentStatus, AgentLog } from '../types/agent';
@@ -12,15 +12,15 @@ interface AgentState {
   status: AgentStatus | null;
   logs: AgentLog[];
   isRunning: boolean;
-  currentGoalId: string | null;
+  currentWorkspaceId: string | null;
   isLoading: boolean;
   error: string | null;
 
   // Actions
   fetchStatus: () => Promise<void>;
   fetchLogs: (goalId?: string, limit?: number) => Promise<void>;
-  startSummarizer: (goalId: string) => Promise<void>;
-  stopAgent: (agentId: string) => Promise<void>;
+  startAgent: (workspaceId: string) => Promise<void>;
+  stopAgent: (workspaceId: string) => Promise<void>;
   clearLogs: () => void;
   clearError: () => void;
 }
@@ -29,7 +29,7 @@ export const useAgentStore = create<AgentState>((set) => ({
   status: null,
   logs: [],
   isRunning: false,
-  currentGoalId: null,
+  currentWorkspaceId: null,
   isLoading: false,
   error: null,
 
@@ -57,21 +57,20 @@ export const useAgentStore = create<AgentState>((set) => ({
     }
   },
 
-  startSummarizer: async (goalId: string) => {
-    set({ isLoading: true, error: null, currentGoalId: goalId });
+  startAgent: async (workspaceId: string) => {
+    set({ isLoading: true, error: null, currentWorkspaceId: workspaceId });
     try {
-      await commands.startSummarizer(goalId);
+      await commands.startAgent(workspaceId);
       set({ isRunning: true, isLoading: false });
     } catch (error) {
       set({ error: String(error), isLoading: false });
     }
   },
 
-  stopAgent: async (agentId: string) => {
+  stopAgent: async (workspaceId: string) => {
     set({ isLoading: true, error: null });
     try {
-      await commands.stopAgent(agentId);
-      // 更新状态
+      await commands.stopAgent(workspaceId);
       const status = await commands.getAgentStatus();
       set({
         status,
@@ -92,7 +91,7 @@ export const useAgentStore = create<AgentState>((set) => ({
   },
 }));
 
-// 初始化事件监听
+// ...
 let unlistenAgent: (() => void) | null = null;
 let unlistenLog: (() => void) | null = null;
 
@@ -103,7 +102,7 @@ export function initAgentListeners() {
     const store = useAgentStore.getState();
     store.fetchStatus();
 
-    // 如果 agent 完成或失败，更新状态
+    // ... agent ... ...
     if (event.status === 'completed' || event.status === 'failed') {
       useAgentStore.setState({ isRunning: false });
     }
@@ -113,7 +112,7 @@ export function initAgentListeners() {
 
   onAgentLog((log) => {
     useAgentStore.setState((state) => ({
-      logs: [log, ...state.logs].slice(0, 100), // 保留最近 100 条日志
+      logs: [log, ...state.logs].slice(0, 100), // ... 100 ...
     }));
   }).then((fn) => {
     unlistenLog = fn;

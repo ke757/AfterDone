@@ -18,16 +18,16 @@ impl EventBridge {
         }
     }
 
-    pub fn emit_agent_stream(&self, goal_id: &str, delta: &str, finished: bool) {
-        let event = format!("ryg:agent:stream:{}", goal_id);
+    pub fn emit_agent_stream(&self, workspace_id: &str, delta: &str, finished: bool) {
+        let event = format!("ryg:agent:stream:{}", workspace_id);
         let _ = self.app.emit(&event, AgentStreamPayload {
             delta: delta.to_string(),
             finished,
         });
     }
 
-    pub fn emit_agent_status(&self, goal_id: &str, agent_type: &str, status: &str, phase: &str) {
-        let event = format!("ryg:agent:status:{}", goal_id);
+    pub fn emit_agent_status(&self, workspace_id: &str, agent_type: &str, status: &str, phase: &str) {
+        let event = format!("ryg:agent:status:{}", workspace_id);
         let _ = self.app.emit(&event, AgentStatusPayload {
             agent_type: agent_type.to_string(),
             status: status.to_string(),
@@ -37,12 +37,12 @@ impl EventBridge {
 
     pub fn emit_agent_decision(
         &self,
-        goal_id: &str,
+        workspace_id: &str,
         decision: &str,
         reasoning: &str,
         data: Option<serde_json::Value>,
     ) {
-        let event = format!("ryg:agent:decision:{}", goal_id);
+        let event = format!("ryg:agent:decision:{}", workspace_id);
         let _ = self.app.emit(&event, AgentDecisionPayload {
             decision: decision.to_string(),
             reasoning: reasoning.to_string(),

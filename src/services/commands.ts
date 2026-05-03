@@ -128,12 +128,12 @@ export async function getAgentLogs(goalId?: string, limit?: number): Promise<Age
   return invoke<AgentLog[]>('get_agent_logs', { goalId, limit });
 }
 
-export async function startSummarizer(goalId: string): Promise<void> {
-  return invoke('start_summarizer', { goalId });
+export async function startAgent(workspaceId: string): Promise<void> {
+  return invoke('agents_start', { workspaceId });
 }
 
-export async function stopAgent(agentId: string): Promise<void> {
-  return invoke('stop_agent', { agentId });
+export async function stopAgent(workspaceId: string): Promise<void> {
+  return invoke('agents_stop', { workspaceId });
 }
 
 // ============================================================================

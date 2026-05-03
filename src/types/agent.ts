@@ -23,7 +23,7 @@ export interface AgentStatus {
 export interface RunningAgent {
   id: string;
   agent_type: 'summarizer' | 'executor' | 'supervisor';
-  goal_id: string;
+  workspace_id: string;
   started_at: string;
 }
 

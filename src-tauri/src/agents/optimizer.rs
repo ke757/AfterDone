@@ -46,8 +46,9 @@ impl OptimizerAgent {
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
     ) -> AppResult<TodoList> {
+        let wid = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             "Starting optimization analysis...\n",
             false,
         );
@@ -69,7 +70,7 @@ impl OptimizerAgent {
         let todo_list = self.parse_todo_list(&response, &parent_bugs)?;
 
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             &format!("Created todo list with {} items\n", todo_list.items.len()),
             false,
         );
@@ -86,8 +87,9 @@ impl OptimizerAgent {
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
     ) -> AppResult<GeneratorTaskResult> {
+        let wid = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             "Creating optimization specification...\n",
             false,
         );
@@ -104,7 +106,7 @@ impl OptimizerAgent {
         ).await?;
 
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             "Optimization specification sent, waiting for response...\n",
             false,
         );
@@ -131,8 +133,9 @@ impl OptimizerAgent {
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
     ) -> AppResult<VerificationResult> {
+        let wid = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             "Verifying optimization result...\n",
             false,
         );
@@ -146,7 +149,7 @@ impl OptimizerAgent {
 
         // Run executor for testing
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             "Running execution agent for optimization verification...\n",
             false,
         );
@@ -180,9 +183,10 @@ impl OptimizerAgent {
         attempt: u32,
         emitter: &EventBridge,
     ) -> AppResult<ConclusionResult> {
+        let wid = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
         if verification.passed {
             emitter.emit_agent_stream(
-                &ctx.goal.id,
+                wid,
                 "Optimization complete! Creating conclusion...\n",
                 true,
             );
@@ -203,7 +207,7 @@ impl OptimizerAgent {
 
         if attempt >= self.max_retries {
             emitter.emit_agent_stream(
-                &ctx.goal.id,
+                wid,
                 &format!("Max retries ({}) reached for optimization\n", self.max_retries),
                 true,
             );
@@ -218,7 +222,7 @@ impl OptimizerAgent {
         }
 
         emitter.emit_agent_stream(
-            &ctx.goal.id,
+            wid,
             &format!("Optimization attempt {}/{} failed, retrying\n", attempt, self.max_retries),
             false,
         );
@@ -396,6 +400,7 @@ impl SideCarAgent for OptimizerAgent {
         llm: Arc<dyn LlmProvider>,
         emitter: EventBridge,
     ) -> AppResult<AgentOutput> {
+        let wid = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
         let mut attempt = 1u32;
 
         loop {
@@ -413,7 +418,7 @@ impl SideCarAgent for OptimizerAgent {
 
             if todo_list.items.is_empty() {
                 emitter.emit_agent_stream(
-                    &ctx.goal.id,
+                    wid,
                     "No optimization tasks found, goal is solidified\n",
                     true,
                 );

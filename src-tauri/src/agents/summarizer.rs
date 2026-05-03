@@ -40,19 +40,19 @@ impl SideCarAgent for GoalSummarizerAgent {
         llm: Arc<dyn LlmProvider>,
         emitter: EventBridge,
     ) -> AppResult<AgentOutput> {
-        let goal_id = &ctx.goal.id;
+        let workspace_id = ctx.workspace_id.as_deref().unwrap_or(&ctx.goal.id);
 
-        emitter.emit_agent_status(goal_id, "summarizer", "running", "summarizing");
+        emitter.emit_agent_status(workspace_id, "summarizer", "running", "summarizing");
 
-        // 将 user message 添加到 memory
+        // ... user message ...
         self.memory.add_message(
-            goal_id,
+            workspace_id,
             RigMessage::user(&ctx.goal.raw_input),
         );
 
-        // 从 memory 中构建对话历史
-        let history = self.memory.get_history(goal_id);
-        let context = self.memory.to_db_context(goal_id, goal_id);
+        // ...
+        let history = self.memory.get_history(workspace_id);
+        let context = self.memory.to_db_context(workspace_id, workspace_id);
 
         let system_prompt = PromptTemplate::system_prompt(&AgentType::Summarizer);
 
@@ -80,23 +80,23 @@ impl SideCarAgent for GoalSummarizerAgent {
         use futures::StreamExt;
         while let Some(chunk) = stream.next().await {
             if self.cancel_token.is_cancelled() {
-                emitter.emit_agent_status(goal_id, "summarizer", "canceled", "summarizing");
-                self.memory.clear(goal_id);
+                emitter.emit_agent_status(workspace_id, "summarizer", "canceled", "summarizing");
+                self.memory.clear(workspace_id);
                 return Err(AppError::Agent("Summarizer was canceled".to_string()));
             }
 
             match chunk {
                 Ok(chunk) => {
                     if !chunk.delta.is_empty() {
-                        emitter.emit_agent_stream(goal_id, &chunk.delta, false);
+                        emitter.emit_agent_stream(workspace_id, &chunk.delta, false);
                         full_response.push_str(&chunk.delta);
                     }
                     if chunk.finished {
-                        emitter.emit_agent_stream(goal_id, "", true);
+                        emitter.emit_agent_stream(workspace_id, "", true);
                     }
                 }
                 Err(e) => {
-                    emitter.emit_agent_status(goal_id, "summarizer", "error", "summarizing");
+                    emitter.emit_agent_status(workspace_id, "summarizer", "error", "summarizing");
                     return Err(e);
                 }
             }
@@ -104,15 +104,15 @@ impl SideCarAgent for GoalSummarizerAgent {
 
         // Store assistant response in memory for future turns
         self.memory.add_message(
-            goal_id,
+            workspace_id,
             RigMessage::assistant(&full_response),
         );
 
         let summary = parse_summary_response(&full_response)?;
 
-        emitter.emit_agent_status(goal_id, "summarizer", "completed", "summarizing");
+        emitter.emit_agent_status(workspace_id, "summarizer", "completed", "summarizing");
         emitter.emit_agent_decision(
-            goal_id,
+            workspace_id,
             "goal_summarized",
             "Generated structured goal summary",
             serde_json::to_value(&summary).ok(),
