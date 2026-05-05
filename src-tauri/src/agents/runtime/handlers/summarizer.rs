@@ -4,7 +4,7 @@ use super::{HandlerContext, ResultHandler};
 use crate::agents::AgentOutput;
 use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
-use crate::memory::{ResultStatus, StoredResult};
+use crate::session::cell::result::{ResultStatus, StoredResult};
 use crate::workhub::{AgentType, GoalsRepo, GoalStatus};
 
 pub struct SummarizerResultHandler;

@@ -9,15 +9,14 @@ use crate::config::AppConfig;
 use crate::db::DatabasePool;
 use crate::events::EventBridge;
 use crate::llm::{LlmProvider, RigProvider};
-use crate::session::SessionManager;
+use crate::session::CellManager;
 
 /// Application state shared across all Tauri commands.
-/// Wrapped in Arc<RwLock<>> for safe concurrent access.
 pub struct AppState {
     pub db: DatabasePool,
     pub config: Arc<RwLock<AppConfig>>,
     pub supervisor: Arc<AgentSupervisor>,
-    pub sessions: Arc<SessionManager>,
+    pub cell_manager: Arc<CellManager>,
     pub emitter: EventBridge,
 }
 
@@ -35,9 +34,7 @@ impl AppState {
 
         // Create LLM provider
         let llm: Arc<dyn LlmProvider> = Arc::new(RigProvider::new(config.llm.clone()));
-
-        // Create session manager
-        let sessions = Arc::new(SessionManager::new());
+        let cell_manager = Arc::new(CellManager::new());
 
         // Create AgentRuntime（持有 transport, llm, sessions, emitter）
         let runtime = Arc::new(AgentRuntime::new(
@@ -45,7 +42,7 @@ impl AppState {
             transport,
             llm,
             emitter.clone(),
-            sessions.clone(),
+            cell_manager.clone(),
         ));
 
         // Create AgentSupervisor（仅持有 runtime + tasks）
@@ -55,7 +52,7 @@ impl AppState {
             db,
             config: Arc::new(RwLock::new(config)),
             supervisor,
-            sessions,
+            cell_manager,
             emitter,
         }
     }

@@ -8,7 +8,7 @@ use crate::agents::{
     GoalSummarizerAgent, BuilderAgent, ExecutorAgent, OptimizerAgent,
 };
 use crate::agents::runtime::handlers::{
-    HandlerContext, ResultHandlerRegistry,
+    HandlerContext,
     summarizer::SummarizerResultHandler,
     builder::BuilderResultHandler,
     executor::ExecutorResultHandler,
@@ -19,8 +19,10 @@ use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
-use crate::memory::{ResultMemory, StoredResult};
-use crate::session::SessionManager;
+use crate::session::cell::{
+    manager::CellManager, SessionCell,
+    result::{StoredResult},
+};
 use crate::workhub::{
     AgentType, GoalsRepo, MilestonesRepo, SkillsRepo, AgentLogsRepo,
     Goal, GoalStatus, WorkSpaceRepo, WorkHub,
@@ -29,19 +31,16 @@ use crate::workhub::{
 /// AgentRuntime — Agent 执行环境
 ///
 /// 职责：
-/// - 上下文读取：从 DB 构建 RuntimeContext
+/// - 上下文读取：从 DB + Cell 构建 RuntimeContext
 /// - Agent 单次 turn 运行：创建 Agent 实例 → 调用 run()
-/// - 结果收集：通过 ResultHandler 转换 → 存入 ResultMemory
-///
-/// Supervisor 通过最小接口 (run_turn / run_task / get_result) 调用。
+/// - 结果收集：通过 ResultHandler 转换 → 存入 Cell
 pub struct AgentRuntime {
     db: DatabasePool,
     transport: Arc<dyn Transport>,
     llm: Arc<dyn LlmProvider>,
     emitter: EventBridge,
-    sessions: Arc<SessionManager>,
-    handlers: ResultHandlerRegistry,
-    result_memory: Arc<ResultMemory>,
+    cell_manager: Arc<CellManager>,
+    handlers: super::handlers::ResultHandlerRegistry,
 }
 
 impl AgentRuntime {
@@ -50,11 +49,9 @@ impl AgentRuntime {
         transport: Arc<dyn Transport>,
         llm: Arc<dyn LlmProvider>,
         emitter: EventBridge,
-        sessions: Arc<SessionManager>,
+        cell_manager: Arc<CellManager>,
     ) -> Self {
-        let result_memory = Arc::new(ResultMemory::new());
-
-        let mut handlers = ResultHandlerRegistry::new();
+        let mut handlers = super::handlers::ResultHandlerRegistry::new();
         handlers.register(Box::new(SummarizerResultHandler));
         handlers.register(Box::new(BuilderResultHandler));
         handlers.register(Box::new(ExecutorResultHandler));
@@ -65,9 +62,8 @@ impl AgentRuntime {
             transport,
             llm,
             emitter,
-            sessions,
+            cell_manager,
             handlers,
-            result_memory,
         }
     }
 
@@ -77,57 +73,24 @@ impl AgentRuntime {
 
     /// 执行一轮对话 turn（用于 deliver_message 模式）
     ///
-    /// 加载上下文 → 追加 user 消息 → agent.run() → handler → store → 返回
+    /// cell_id → 获取 Cell → 追加 user 消息 → agent.run() → handler.handle() → cell.set_result()
     pub async fn run_turn(
         &self,
-        workspace_id: &str,
+        cell_id: &str,
         message: &str,
     ) -> AppResult<StoredResult> {
-        let (workspace, goal) = self.load_workspace_goal(workspace_id).await?;
+        let cell = self.cell_manager.get_cell(cell_id).await.ok_or_else(|| {
+            AppError::NotFound(format!("Cell not found: {}", cell_id))
+        })?;
+
+        let workspace_id = cell.workspace_id().to_string();
+        let (_, goal) = self.load_workspace_goal(&workspace_id).await?;
         let agent_type = determine_agent_type(goal.status.clone())?;
 
-        let ctx: RuntimeContext = self.build_context(&goal).await?;
-        let session_id = workspace_id.to_string();
+        let ctx = self.build_context(&goal, cell.clone()).await?;
 
-        // 追加 user 消息到 session
-        ctx.session.add_message("user", message, &agent_type.to_string()).await;
-
-        // 创建 agent 实例
-        let cancel_token = CancellationToken::new();
-        let agent = self.create_agent(agent_type.clone(), cancel_token);
-
-        // 运行
-        let output: AgentOutput = agent.run(
-            ctx,
-            self.transport.clone(),
-            self.llm.clone(),
-            self.emitter.clone(),
-        ).await?;
-
-        // 结果处理 → 存储
-        let stored = self.handle_and_store(
-            output,
-            agent_type,
-            &session_id,
-            &workspace.id,
-            &goal.id,
-        ).await?;
-
-        Ok(stored)
-    }
-
-    /// 执行一次完整 Agent 任务（用于 start_agent 的 spawned task）
-    ///
-    /// 与 run_turn 的区别：不追加 user 消息，适用于 Builder/Executor/Optimizer
-    /// 这些 Agent 的任务由 goal context 驱动而非用户对话。
-    ///
-    /// 完整流程：context → agent.run() → handler.handle() → store Memory → handler.persist() → DB
-    pub async fn run_task(&self, workspace_id: &str) -> AppResult<StoredResult> {
-        let (workspace, goal) = self.load_workspace_goal(workspace_id).await?;
-        let agent_type = determine_agent_type(goal.status.clone())?;
-
-        let ctx = self.build_context(&goal).await?;
-        let session_id = workspace_id.to_string();
+        // 追加 user 消息到 cell
+        cell.add_message("user", message).await;
 
         let cancel_token = CancellationToken::new();
         let agent = self.create_agent(agent_type.clone(), cancel_token);
@@ -139,15 +102,37 @@ impl AgentRuntime {
             self.emitter.clone(),
         ).await?;
 
-        let stored = self.handle_and_store(
-            output,
-            agent_type.clone(),
-            &session_id,
-            &workspace.id,
-            &goal.id,
+        let stored = self.handle_and_store(output, agent_type, &cell, &goal.id).await?;
+        Ok(stored)
+    }
+
+    /// 执行一次完整 Agent 任务（用于 start_agent 的 spawned task）
+    ///
+    /// 完整流程：context → agent.run() → handler.handle() → cell.set_result() → handler.persist()
+    pub async fn run_task(&self, cell_id: &str) -> AppResult<StoredResult> {
+        let cell = self.cell_manager.get_cell(cell_id).await.ok_or_else(|| {
+            AppError::NotFound(format!("Cell not found: {}", cell_id))
+        })?;
+
+        let workspace_id = cell.workspace_id().to_string();
+        let (_, goal) = self.load_workspace_goal(&workspace_id).await?;
+        let agent_type = determine_agent_type(goal.status.clone())?;
+
+        let ctx = self.build_context(&goal, cell.clone()).await?;
+
+        let cancel_token = CancellationToken::new();
+        let agent = self.create_agent(agent_type.clone(), cancel_token);
+
+        let output = agent.run(
+            ctx,
+            self.transport.clone(),
+            self.llm.clone(),
+            self.emitter.clone(),
         ).await?;
 
-        // 持久化到 DB（内置能力，不依赖 Services 层）
+        let stored = self.handle_and_store(output, agent_type.clone(), &cell, &goal.id).await?;
+
+        // 持久化到 DB
         let handler = self.handlers.get(&agent_type).ok_or_else(|| {
             AppError::Agent(format!("No handler registered for agent type: {:?}", agent_type))
         })?;
@@ -156,33 +141,26 @@ impl AgentRuntime {
         Ok(stored)
     }
 
-    /// 从 ResultMemory 查询指定 session 的最新结果
-    pub async fn get_result(&self, session_id: &str) -> Option<StoredResult> {
-        self.result_memory.get_latest(session_id).await
+    /// CellManager 访问
+    pub fn cell_manager(&self) -> &Arc<CellManager> {
+        &self.cell_manager
     }
 
-    /// DB pool 访问（供 Supervisor 持久化使用）
+    /// DB pool 访问
     pub fn db(&self) -> &DatabasePool {
         &self.db
-    }
-
-    /// ResultMemory 访问
-    pub fn result_memory(&self) -> &Arc<ResultMemory> {
-        &self.result_memory
     }
 
     // ======================================================================
     // 内部方法
     // ======================================================================
 
-    /// 加载 workspace 和关联的 goal
     async fn load_workspace_goal(&self, workspace_id: &str) -> AppResult<(crate::workhub::WorkSpace, Goal)> {
         let workspace = WorkSpaceRepo::get_by_id(&self.db, workspace_id).await?;
         let goal = GoalsRepo::get_by_id(&self.db, &workspace.goal_id).await?;
         Ok((workspace, goal))
     }
 
-    /// 创建 Agent 实例
     fn create_agent(&self, agent_type: AgentType, cancel_token: CancellationToken) -> Box<dyn SideCarAgent> {
         match agent_type {
             AgentType::Summarizer => Box::new(GoalSummarizerAgent::new(cancel_token)),
@@ -192,13 +170,12 @@ impl AgentRuntime {
         }
     }
 
-    /// Handler 处理 + 存储
+    /// Handler 处理 + 存储到 Cell
     async fn handle_and_store(
         &self,
         output: AgentOutput,
         agent_type: AgentType,
-        session_id: &str,
-        workspace_id: &str,
+        cell: &Arc<dyn SessionCell>,
         goal_id: &str,
     ) -> AppResult<StoredResult> {
         let handler = self.handlers.get(&agent_type).ok_or_else(|| {
@@ -206,18 +183,22 @@ impl AgentRuntime {
         })?;
 
         let stored = handler.handle(output, &HandlerContext {
-            session_id: session_id.to_string(),
-            workspace_id: workspace_id.to_string(),
+            session_id: cell.cell_id().to_string(),
+            workspace_id: cell.workspace_id().to_string(),
             goal_id: goal_id.to_string(),
         }).await?;
 
-        self.result_memory.store(stored.clone()).await;
+        cell.set_result(stored.clone()).await;
 
         Ok(stored)
     }
 
-    /// 构建 RuntimeContext（从 Supervisor 迁移）
-    pub(crate) async fn build_context(&self, goal: &Goal) -> AppResult<RuntimeContext> {
+    /// 构建 RuntimeContext
+    pub(crate) async fn build_context(
+        &self,
+        goal: &Goal,
+        cell: Arc<dyn SessionCell>,
+    ) -> AppResult<RuntimeContext> {
         let current_milestone = match &goal.current_milestone_id {
             Some(mid) => Some(MilestonesRepo::get_by_id(&self.db, mid).await?),
             None => None,
@@ -236,12 +217,6 @@ impl AgentRuntime {
             None => (None, None),
         };
 
-        let session = if let Some(ref node_id) = current_node_id {
-            self.sessions.get_or_create_node(node_id)?
-        } else {
-            self.sessions.get_or_create_temp(workspace_id.as_deref().unwrap_or(&goal.id)).await
-        };
-
         Ok(RuntimeContext {
             goal: goal.clone(),
             current_milestone,
@@ -250,12 +225,11 @@ impl AgentRuntime {
             metadata: HashMap::new(),
             workspace_id,
             current_node_id,
-            session,
+            cell,
         })
     }
 }
 
-/// 根据 goal 状态确定 agent 类型
 fn determine_agent_type(goal_status: GoalStatus) -> AppResult<AgentType> {
     match goal_status {
         GoalStatus::Draft => Ok(AgentType::Summarizer),

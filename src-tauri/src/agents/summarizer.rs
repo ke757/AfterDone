@@ -45,7 +45,7 @@ impl SideCarAgent for GoalSummarizerAgent {
 
         emitter.emit_agent_status(workspace_id, "summarizer", "running", "summarizing");
 
-        let history = ctx.session.get_history();
+        let history = ctx.cell.get_history();
 
         let system_prompt = PromptTemplate::system_prompt(&AgentType::Summarizer);
 
@@ -66,7 +66,7 @@ impl SideCarAgent for GoalSummarizerAgent {
         while let Some(chunk) = stream.next().await {
             if self.cancel_token.is_cancelled() {
                 emitter.emit_agent_status(workspace_id, "summarizer", "canceled", "summarizing");
-                ctx.session.clear().await;
+                ctx.cell.clear().await;
                 return Err(AppError::Agent("Summarizer was canceled".to_string()));
             }
 
@@ -88,7 +88,7 @@ impl SideCarAgent for GoalSummarizerAgent {
         }
 
         // 记录 assistant 响应到 session
-        ctx.session.add_message("assistant", &full_response, "summarizer").await;
+        ctx.cell.add_message("assistant", &full_response).await;
 
         // 尝试解析 GoalSummary
         let summary_draft = try_parse_goal_summary(&full_response);

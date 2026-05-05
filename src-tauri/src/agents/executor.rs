@@ -219,7 +219,7 @@ Respond with only one line."#,
         let response = llm.complete(
             "You are an execution agent that decides the next action.",
             &prompt,
-            &ctx.session.get_history(),
+            &ctx.cell.get_history(),
         ).await?;
         self.parse_action(&response, skills)
     }

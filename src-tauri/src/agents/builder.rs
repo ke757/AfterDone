@@ -65,7 +65,7 @@ impl BuilderAgent {
 
         // Analyze the goal
         let prompt = self.build_analysis_prompt(ctx, &existing_conclusion);
-        let history = ctx.session.get_history();
+        let history = ctx.cell.get_history();
         let response = llm.complete(
             "You are a goal planning agent that creates detailed plans.",
             &prompt,
@@ -140,7 +140,7 @@ impl BuilderAgent {
         let result = self.wait_for_completion(transport, &task_id, wid, emitter).await?;
 
         // Optionally, use LLM to enhance the result
-        let enhanced_result = self.enhance_generator_result(&result, llm, &ctx.session.get_history()).await?;
+        let enhanced_result = self.enhance_generator_result(&result, llm, &ctx.cell.get_history()).await?;
 
         Ok(enhanced_result)
     }
@@ -313,7 +313,7 @@ impl BuilderAgent {
         let _response = llm.complete(
             "You are a verification agent.",
             &verify_prompt,
-            &ctx.session.get_history(),
+            &ctx.cell.get_history(),
         ).await?;
 
         Ok(VerificationResult {

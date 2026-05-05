@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
 use crate::db::DatabasePool;
 use crate::error::AppResult;
 use crate::events::EventBridge;
-use crate::session::{Session, SessionManager};
+use crate::session::Message;
 use crate::workhub::{Goal, GoalStatus, GoalSummary, GoalsRepo, WorkSpaceRepo};
 
 /// Summarizer 持久化服务
@@ -13,10 +11,9 @@ use crate::workhub::{Goal, GoalStatus, GoalSummary, GoalsRepo, WorkSpaceRepo};
 pub struct SummarizerService;
 
 impl SummarizerService {
-    /// 从 session 最后一条 assistant 消息中解析 GoalSummary
-    pub async fn extract_summary(session: &Arc<dyn Session>) -> AppResult<GoalSummary> {
-        let history = session.get_history();
-        let last_assistant = history
+    /// 从消息列表中提取最后一条 assistant 消息中的 GoalSummary
+    pub fn extract_summary_from_messages(messages: &[Message]) -> AppResult<GoalSummary> {
+        let last_assistant = messages
             .iter()
             .rev()
             .find(|m| m.role == "assistant")
@@ -61,23 +58,21 @@ impl SummarizerService {
         Ok(goal)
     }
 
-    /// 确认并持久化 Summary（自足方法，不依赖 Supervisor/Runtime）
+    /// 确认并持久化 Summary
     ///
-    /// 从 workspace 加载 goal → 获取 session → 提取 summary → 写 DB → 更新状态
+    /// 从 cell 的会话历史中提取 GoalSummary → 写入 DB → 更新状态
     pub async fn confirm(
         pool: &DatabasePool,
         workspace_id: &str,
-        sessions: &SessionManager,
+        messages: &[Message],
         emitter: &EventBridge,
     ) -> AppResult<Goal> {
         let workspace = WorkSpaceRepo::get_by_id(pool, workspace_id).await?;
         let goal = GoalsRepo::get_by_id(pool, &workspace.goal_id).await?;
-        let session = sessions.get_or_create_temp(workspace_id).await;
 
-        let summary = Self::extract_summary(&session).await?;
+        let summary = Self::extract_summary_from_messages(messages)?;
         let goal = Self::persist_summary(pool, &goal.id, &summary).await?;
 
-        // 状态回 Draft 等待用户 Pin
         GoalsRepo::update_status(pool, &goal.id, GoalStatus::Draft).await?;
         emitter.emit_goal_status(&goal.id, "draft", "draft");
 

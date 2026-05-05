@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::workhub::{AgentType, Goal, Milestone, Skill, AgentLog};
-use crate::session::Session;
+use crate::session::cell::SessionCell;
 
 /// Context passed to any agent on each run.
 /// Constructed by AgentSupervisor from the database before spawning.
@@ -18,8 +18,8 @@ pub struct RuntimeContext {
     pub workspace_id: Option<String>,
     /// Current WorkNode ID (if any)
     pub current_node_id: Option<String>,
-    /// Agent session — records conversation history per scope
-    pub session: Arc<dyn Session>,
+    /// SessionCell — 封装 session 的会话单元格
+    pub cell: Arc<dyn SessionCell>,
 }
 
 /// Output from an agent run

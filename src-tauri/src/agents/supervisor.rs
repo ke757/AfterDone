@@ -5,21 +5,15 @@ use tokio::sync::RwLock;
 use crate::agents::runtime::AgentRuntime;
 use crate::agents::types::{AgentStatus, AgentTaskHandle};
 use crate::error::{AppError, AppResult};
-use crate::memory::StoredResult;
+use crate::session::cell::result::{ResultStatus, StoredResult};
 use crate::workhub::{AgentType, GoalsRepo, GoalStatus, WorkSpaceRepo};
 
 /// AgentSupervisor — 任务分发 + 生命周期管理
 ///
 /// 职责：
-/// - `deliver_message()` — 委托 AgentRuntime 执行对话 turn
-/// - `start_agent()`  — 启动后台 Agent 任务（Builder/Executor/Optimizer）
-/// - `stop_agent()`   — 取消运行中的任务
-/// - `get_status()`   — 查询 Agent 运行状态
-/// - `list_running()` — 列出所有运行中的 Agent
-///
-/// 不再持有 DB、Transport、LLM、Sessions、Emitter。
-/// 上下文读取和 Agent 执行由 AgentRuntime 负责。
-/// 持久化编排由 Service 层负责。
+/// - `deliver_message(cell_id, msg)` — 委托 AgentRuntime 执行对话 turn
+/// - `start_agent(cell_id)` — 启动后台 Agent 任务
+/// - `stop_agent(workspace_id)` / `get_status(workspace_id)` — 任务状态管理
 pub struct AgentSupervisor {
     runtime: Arc<AgentRuntime>,
     tasks: Arc<RwLock<HashMap<String, AgentTaskHandle>>>,
@@ -42,69 +36,70 @@ impl AgentSupervisor {
     // deliver_message — 对话式入口
     // ======================================================================
 
-    /// 投递一条用户消息给 Agent
-    ///
-    /// 根据 goal 状态确定 agent_type，委托 AgentRuntime 执行一轮 turn。
-    /// 当前仅 Summarizer 使用 deliver_message 模式，
-    /// 未来所有 Agent 将统一到此入口。
+    /// 投递一条用户消息到指定 Cell 的 Agent
     pub async fn deliver_message(
         &self,
-        workspace_id: &str,
+        cell_id: &str,
         message: &str,
     ) -> AppResult<StoredResult> {
-        let workspace = WorkSpaceRepo::get_by_id(self.runtime.db(), workspace_id).await?;
+        let cell = self.runtime.cell_manager().get_cell(cell_id).await.ok_or_else(|| {
+            AppError::NotFound(format!("Cell not found: {}", cell_id))
+        })?;
+
+        let workspace = WorkSpaceRepo::get_by_id(self.runtime.db(), cell.workspace_id()).await?;
         let goal = GoalsRepo::get_by_id(self.runtime.db(), &workspace.goal_id).await?;
         let agent_type = determine_agent_type(goal.status.clone())?;
 
         match agent_type {
             AgentType::Summarizer => {
-                self.runtime.run_turn(workspace_id, message).await
+                self.runtime.run_turn(cell_id, message).await
             }
             _ => {
-                // 其他 Agent 暂走 start_agent 模式
-                self.start_agent(workspace_id).await?;
-                let msg = format!("{} agent started for workspace {}", agent_type, workspace_id);
+                self.start_agent(cell_id).await?;
+                let msg = format!("{} agent started", agent_type);
                 Ok(StoredResult::new(
-                    workspace_id.to_string(),
-                    workspace_id.to_string(),
+                    cell_id.to_string(),
+                    workspace.id,
                     goal.id,
                     agent_type,
                     serde_json::json!({ "message": msg }),
-                    crate::memory::ResultStatus::Active,
+                    ResultStatus::Active,
                 ))
             }
         }
     }
 
-    /// 查询 workspace 的当前对话状态（从 ResultMemory 获取）
-    pub async fn get_conversation_status(
-        &self,
-        workspace_id: &str,
-    ) -> Option<crate::memory::ResultStatus> {
-        self.runtime.get_result(workspace_id).await.map(|r| r.status)
+    /// 查询 Cell 的当前结果状态
+    pub async fn get_cell_result_status(&self, cell_id: &str) -> Option<ResultStatus> {
+        self.runtime.cell_manager()
+            .get_cell(cell_id).await
+            .and_then(|c| c.get_result().map(|r| r.status))
     }
 
     // ======================================================================
-    // start_agent / stop_agent / get_status — 任务式 Agent 生命周期
+    // start_agent / stop_agent / get_status
     // ======================================================================
 
-    /// 为指定 workspace 启动后台 Agent 任务（Builder/Executor/Optimizer）
-    pub async fn start_agent(&self, workspace_id: &str) -> AppResult<AgentStatus> {
-        let workspace = WorkSpaceRepo::get_by_id(self.runtime.db(), workspace_id).await?;
+    /// 为指定 Cell 启动后台 Agent 任务
+    pub async fn start_agent(&self, cell_id: &str) -> AppResult<AgentStatus> {
+        let cell = self.runtime.cell_manager().get_cell(cell_id).await.ok_or_else(|| {
+            AppError::NotFound(format!("Cell not found: {}", cell_id))
+        })?;
+
+        let workspace = WorkSpaceRepo::get_by_id(self.runtime.db(), cell.workspace_id()).await?;
         let goal = GoalsRepo::get_by_id(self.runtime.db(), &workspace.goal_id).await?;
         let agent_type = determine_agent_type(goal.status.clone())?;
 
-        // 检查是否已有运行中的 Agent
+        // 检查是否已有运行中的 Agent（按 workspace 检查）
         {
             let tasks = self.tasks.read().await;
-            if let Some(handle) = tasks.get(workspace_id) {
+            if let Some(handle) = tasks.get(cell.workspace_id()) {
                 if handle.status == AgentStatus::Running || handle.status == AgentStatus::Starting {
                     return Ok(handle.status.clone());
                 }
             }
         }
 
-        // 注册任务 Handle
         let cancel_token = tokio_util::sync::CancellationToken::new();
         let handle = AgentTaskHandle {
             agent_type: agent_type.clone(),
@@ -114,7 +109,7 @@ impl AgentSupervisor {
         };
         {
             let mut tasks = self.tasks.write().await;
-            tasks.insert(workspace_id.to_string(), handle);
+            tasks.insert(cell.workspace_id().to_string(), handle);
         }
 
         // 更新 goal 状态
@@ -124,19 +119,16 @@ impl AgentSupervisor {
             AgentType::Executor => GoalStatus::Building,
             AgentType::Optimizer => GoalStatus::Optimizing,
         };
-        let _previous_status = goal.status.clone();
         GoalsRepo::update_status(self.runtime.db(), &goal.id, new_status.clone()).await?;
-        // Emit via runtime's emitter (accessible via runtime's internal)
-        // We'll handle event emission in the spawned task
-
+        
         // 启动后台任务
         let runtime = self.runtime.clone();
         let tasks = self.tasks.clone();
-        let workspace_id_owned = workspace_id.to_string();
+        let workspace_id_owned = cell.workspace_id().to_string();
+        let cell_id_owned = cell_id.to_string();
         let goal_id_owned = goal.id.clone();
 
         tokio::spawn(async move {
-            // 更新状态为 Running
             {
                 let mut tasks_guard = tasks.write().await;
                 if let Some(h) = tasks_guard.get_mut(&workspace_id_owned) {
@@ -145,7 +137,7 @@ impl AgentSupervisor {
             }
 
             // 通过 AgentRuntime 执行（内部已完成 handler.handle() + handler.persist()）
-            let result = runtime.run_task(&workspace_id_owned).await;
+            let result = runtime.run_task(&cell_id_owned).await;
 
             match result {
                 Ok(_stored) => {

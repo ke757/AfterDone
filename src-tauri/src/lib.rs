@@ -10,7 +10,6 @@ mod commands;
 mod workhub;
 mod session;
 mod services;
-mod memory;
 
 use state::AppState;
 use tauri::Manager;
@@ -91,7 +90,9 @@ pub fn run() {
             commands::workhub_cmd::worknode_get_user_manual,
             commands::workhub_cmd::worknode_goal_achieved,
             commands::workhub_cmd::worknode_achieved,
-            commands::sessions::sessions_get_node,
+            commands::sessions::cell_create,
+            commands::sessions::cell_list_by_node,
+            commands::sessions::cell_get_history,
             commands::summarizer::summarizer_send_message,
             commands::summarizer::summarizer_confirm,
             commands::summarizer::summarizer_status,

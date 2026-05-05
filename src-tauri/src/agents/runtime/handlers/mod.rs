@@ -16,7 +16,7 @@ use crate::workhub::AgentType;
 use crate::agents::AgentOutput;
 use crate::db::DatabasePool;
 use crate::error::AppResult;
-use crate::memory::StoredResult;
+use crate::session::cell::result::StoredResult;
 
 /// Handler 需要的上下文信息
 #[derive(Debug, Clone)]
