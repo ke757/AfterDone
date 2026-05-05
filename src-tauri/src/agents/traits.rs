@@ -6,7 +6,7 @@ use crate::workhub::AgentType;
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
 use crate::error::AppResult;
-use crate::agents::types::{GoalContext, AgentOutput};
+use crate::agents::types::{RuntimeContext, AgentOutput};
 
 /// Core trait for all SideCar Agents.
 /// Agents are pure `run() → output` functions.
@@ -25,7 +25,7 @@ pub trait SideCarAgent: Send + Sync {
     /// - emitter: for streaming events to the frontend
     async fn run(
         &self,
-        ctx: GoalContext,
+        ctx: RuntimeContext,
         transport: Arc<dyn Transport>,
         llm: Arc<dyn LlmProvider>,
         emitter: EventBridge,

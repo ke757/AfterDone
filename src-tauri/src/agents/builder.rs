@@ -22,7 +22,7 @@ use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
 use crate::agents::traits::SideCarAgent;
-use crate::agents::types::{GoalContext, AgentOutput};
+use crate::agents::types::{RuntimeContext, AgentOutput};
 use crate::workhub::{
     WorkHub, Specification, ModuleSpec, SkillRequirement,
 };
@@ -49,7 +49,7 @@ impl BuilderAgent {
     /// Phase 1: Initial Analysis
     async fn analyze(
         &self,
-        ctx: &GoalContext,
+        ctx: &RuntimeContext,
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
     ) -> AppResult<PlanResult> {
@@ -87,7 +87,7 @@ impl BuilderAgent {
     /// Phase 2: Transform and Dispatch
     async fn dispatch_to_generator(
         &self,
-        ctx: &GoalContext,
+        ctx: &RuntimeContext,
         plan: &PlanResult,
         transport: &Arc<dyn Transport>,
         llm: &Arc<dyn LlmProvider>,
@@ -268,7 +268,7 @@ impl BuilderAgent {
     /// Phase 3: Verification
     async fn verify(
         &self,
-        ctx: &GoalContext,
+        ctx: &RuntimeContext,
         generator_result: &GeneratorTaskResult,
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
@@ -325,7 +325,7 @@ impl BuilderAgent {
     /// Phase 4: Conclusion or Retry
     async fn conclude(
         &self,
-        ctx: &GoalContext,
+        ctx: &RuntimeContext,
         verification: &VerificationResult,
         attempt: u32,
         emitter: &EventBridge,
@@ -377,13 +377,13 @@ impl BuilderAgent {
     }
 
     /// Get existing conclusion from current worknode
-    async fn get_existing_conclusion(&self, _ctx: &GoalContext) -> AppResult<Option<String>> {
+    async fn get_existing_conclusion(&self, _ctx: &RuntimeContext) -> AppResult<Option<String>> {
         // In a real implementation, use WorkHub::get_node_conclusion
         Ok(None)
     }
 
     /// Build analysis prompt
-    fn build_analysis_prompt(&self, ctx: &GoalContext, existing: &Option<String>) -> String {
+    fn build_analysis_prompt(&self, ctx: &RuntimeContext, existing: &Option<String>) -> String {
         let mut prompt = format!(
             r#"You are a goal planning agent. Analyze the following goal and create a detailed plan.
 
@@ -469,7 +469,7 @@ Format your response as JSON:
     }
 
     /// Transform plan to specification for generator
-    fn transform_to_specification(&self, plan: &PlanResult, ctx: &GoalContext) -> Specification {
+    fn transform_to_specification(&self, plan: &PlanResult, ctx: &RuntimeContext) -> Specification {
         Specification {
             project_background: format!(
                 "Project: {}\n\n{}",
@@ -521,7 +521,7 @@ impl SideCarAgent for BuilderAgent {
 
     async fn run(
         &self,
-        ctx: GoalContext,
+        ctx: RuntimeContext,
         transport: Arc<dyn Transport>,
         llm: Arc<dyn LlmProvider>,
         emitter: EventBridge,

@@ -9,6 +9,8 @@ mod state;
 mod commands;
 mod workhub;
 mod session;
+mod services;
+mod memory;
 
 use state::AppState;
 use tauri::Manager;
@@ -90,6 +92,9 @@ pub fn run() {
             commands::workhub_cmd::worknode_goal_achieved,
             commands::workhub_cmd::worknode_achieved,
             commands::sessions::sessions_get_node,
+            commands::summarizer::summarizer_send_message,
+            commands::summarizer::summarizer_confirm,
+            commands::summarizer::summarizer_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

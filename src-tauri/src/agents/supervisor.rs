@@ -2,65 +2,99 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::agents::GoalSummarizerAgent;
-use crate::agents::BuilderAgent;
-use crate::agents::ExecutorAgent;
-use crate::agents::OptimizerAgent;
-use crate::agents::traits::SideCarAgent;
-use crate::agents::types::{AgentOutput, AgentStatus, AgentTaskHandle, GoalContext};
-use crate::adapter::Transport;
-use crate::workhub::{AgentType, GoalsRepo, MilestonesRepo, SkillsRepo, AgentLogsRepo, GoalStatus};
-use crate::workhub::{WorkSpaceRepo};
-use crate::db::DatabasePool;
+use crate::agents::runtime::AgentRuntime;
+use crate::agents::types::{AgentStatus, AgentTaskHandle};
 use crate::error::{AppError, AppResult};
-use crate::events::EventBridge;
-use crate::llm::LlmProvider;
-use crate::session::SessionManager;
-use crate::workhub::WorkHub;
+use crate::memory::StoredResult;
+use crate::workhub::{AgentType, GoalsRepo, GoalStatus, WorkSpaceRepo};
 
-/// The AgentSupervisor is the central coordinator(调度器).
-/// It owns the lifecycle of all agent tasks and manages phase transitions(阶段转换).
+/// AgentSupervisor — 任务分发 + 生命周期管理
+///
+/// 职责：
+/// - `deliver_message()` — 委托 AgentRuntime 执行对话 turn
+/// - `start_agent()`  — 启动后台 Agent 任务（Builder/Executor/Optimizer）
+/// - `stop_agent()`   — 取消运行中的任务
+/// - `get_status()`   — 查询 Agent 运行状态
+/// - `list_running()` — 列出所有运行中的 Agent
+///
+/// 不再持有 DB、Transport、LLM、Sessions、Emitter。
+/// 上下文读取和 Agent 执行由 AgentRuntime 负责。
+/// 持久化编排由 Service 层负责。
 pub struct AgentSupervisor {
-    db: DatabasePool,
-    transport: Arc<dyn Transport>,
-    llm: Arc<dyn LlmProvider>,
-    emitter: EventBridge,
+    runtime: Arc<AgentRuntime>,
     tasks: Arc<RwLock<HashMap<String, AgentTaskHandle>>>,
-    sessions: Arc<SessionManager>,
 }
 
 impl AgentSupervisor {
-    pub fn new(
-        db: DatabasePool,
-        transport: Arc<dyn Transport>,
-        llm: Arc<dyn LlmProvider>,
-        emitter: EventBridge,
-        sessions: Arc<SessionManager>,
-    ) -> Self {
+    pub fn new(runtime: Arc<AgentRuntime>) -> Self {
         Self {
-            db,
-            transport,
-            llm,
-            emitter,
+            runtime,
             tasks: Arc::new(RwLock::new(HashMap::new())),
-            sessions,
         }
     }
 
-    /// sessions accessor for Tauri commands
-    pub fn sessions(&self) -> &Arc<SessionManager> {
-        &self.sessions
+    /// 提供 Runtime 访问（供 app_state 使用）
+    pub fn runtime(&self) -> &Arc<AgentRuntime> {
+        &self.runtime
     }
 
-    /// 为给定的工作空间启动一个代理.
-    /// - 根据对应目标状态确定代理类型.
-    /// - 维护 agent 运行时的状态变更
-    pub async fn start_agent(&self, workspace_id: &str) -> AppResult<AgentStatus> {
-        let workspace = WorkSpaceRepo::get_by_id(&self.db, workspace_id).await?;
-        let goal = GoalsRepo::get_by_id(&self.db, &workspace.goal_id).await?;
+    // ======================================================================
+    // deliver_message — 对话式入口
+    // ======================================================================
+
+    /// 投递一条用户消息给 Agent
+    ///
+    /// 根据 goal 状态确定 agent_type，委托 AgentRuntime 执行一轮 turn。
+    /// 当前仅 Summarizer 使用 deliver_message 模式，
+    /// 未来所有 Agent 将统一到此入口。
+    pub async fn deliver_message(
+        &self,
+        workspace_id: &str,
+        message: &str,
+    ) -> AppResult<StoredResult> {
+        let workspace = WorkSpaceRepo::get_by_id(self.runtime.db(), workspace_id).await?;
+        let goal = GoalsRepo::get_by_id(self.runtime.db(), &workspace.goal_id).await?;
         let agent_type = determine_agent_type(goal.status.clone())?;
 
-        // 检查是否已经为该工作空间运行了代理
+        match agent_type {
+            AgentType::Summarizer => {
+                self.runtime.run_turn(workspace_id, message).await
+            }
+            _ => {
+                // 其他 Agent 暂走 start_agent 模式
+                self.start_agent(workspace_id).await?;
+                let msg = format!("{} agent started for workspace {}", agent_type, workspace_id);
+                Ok(StoredResult::new(
+                    workspace_id.to_string(),
+                    workspace_id.to_string(),
+                    goal.id,
+                    agent_type,
+                    serde_json::json!({ "message": msg }),
+                    crate::memory::ResultStatus::Active,
+                ))
+            }
+        }
+    }
+
+    /// 查询 workspace 的当前对话状态（从 ResultMemory 获取）
+    pub async fn get_conversation_status(
+        &self,
+        workspace_id: &str,
+    ) -> Option<crate::memory::ResultStatus> {
+        self.runtime.get_result(workspace_id).await.map(|r| r.status)
+    }
+
+    // ======================================================================
+    // start_agent / stop_agent / get_status — 任务式 Agent 生命周期
+    // ======================================================================
+
+    /// 为指定 workspace 启动后台 Agent 任务（Builder/Executor/Optimizer）
+    pub async fn start_agent(&self, workspace_id: &str) -> AppResult<AgentStatus> {
+        let workspace = WorkSpaceRepo::get_by_id(self.runtime.db(), workspace_id).await?;
+        let goal = GoalsRepo::get_by_id(self.runtime.db(), &workspace.goal_id).await?;
+        let agent_type = determine_agent_type(goal.status.clone())?;
+
+        // 检查是否已有运行中的 Agent
         {
             let tasks = self.tasks.read().await;
             if let Some(handle) = tasks.get(workspace_id) {
@@ -70,23 +104,8 @@ impl AgentSupervisor {
             }
         }
 
-        // 创建取消令牌
+        // 注册任务 Handle
         let cancel_token = tokio_util::sync::CancellationToken::new();
-        let workspace_id_owned = workspace_id.to_string();
-        let goal_id_owned = goal.id.clone();
-
-        // 从DB构建目标上下文（包含工作空间信息）
-        let ctx = self.build_goal_context(&goal).await?;
-
-        // 创建适当的代理
-        let agent: Box<dyn SideCarAgent> = match agent_type {
-            AgentType::Summarizer => Box::new(GoalSummarizerAgent::new(cancel_token.clone())),
-            AgentType::Builder => Box::new(BuilderAgent::new(cancel_token.clone())),
-            AgentType::Executor => Box::new(ExecutorAgent::new(cancel_token.clone())),
-            AgentType::Optimizer => Box::new(OptimizerAgent::new(cancel_token.clone())),
-        };
-
-        // 注册任务 Handle 到 tasks
         let handle = AgentTaskHandle {
             agent_type: agent_type.clone(),
             cancel_token: cancel_token.clone(),
@@ -98,62 +117,57 @@ impl AgentSupervisor {
             tasks.insert(workspace_id.to_string(), handle);
         }
 
-        // 更新目标状态
+        // 更新 goal 状态
         let new_status = match agent_type {
             AgentType::Summarizer => GoalStatus::Draft,
             AgentType::Builder => GoalStatus::Building,
             AgentType::Executor => GoalStatus::Building,
             AgentType::Optimizer => GoalStatus::Optimizing,
         };
-        let previous_status = goal.status.clone();
-        GoalsRepo::update_status(&self.db, &goal.id, new_status.clone()).await?;
-        self.emitter.emit_goal_status(&goal.id, &new_status.to_string(), &previous_status.to_string());
+        let _previous_status = goal.status.clone();
+        GoalsRepo::update_status(self.runtime.db(), &goal.id, new_status.clone()).await?;
+        // Emit via runtime's emitter (accessible via runtime's internal)
+        // We'll handle event emission in the spawned task
 
-        // 启动代理任务
-        let db = self.db.clone();
-        let transport = self.transport.clone();
-        let llm = self.llm.clone();
-        let emitter = self.emitter.clone();
+        // 启动后台任务
+        let runtime = self.runtime.clone();
         let tasks = self.tasks.clone();
-        let workspace_id_tasks = workspace_id_owned.clone();
+        let workspace_id_owned = workspace_id.to_string();
+        let goal_id_owned = goal.id.clone();
 
         tokio::spawn(async move {
             // 更新状态为 Running
             {
                 let mut tasks_guard = tasks.write().await;
-                if let Some(h) = tasks_guard.get_mut(&workspace_id_tasks) {
+                if let Some(h) = tasks_guard.get_mut(&workspace_id_owned) {
                     h.status = AgentStatus::Running;
                 }
             }
 
-            // 运行 Agent
-            let result = agent.run(ctx, transport, llm, emitter.clone()).await;
+            // 通过 AgentRuntime 执行（内部已完成 handler.handle() + handler.persist()）
+            let result = runtime.run_task(&workspace_id_owned).await;
 
-            // 处理结果，将 Agent 的工作成果持久化到数据库并更新相关状态：
             match result {
-                Ok(output) => {
-                    if let Err(e) = handle_agent_output(&db, &goal_id_owned, &output, &emitter).await {
-                        tracing::error!("Failed to handle agent output: {}", e);
-                        let mut tasks_guard = tasks.write().await;
-                        if let Some(h) = tasks_guard.get_mut(&workspace_id_tasks) {
-                            h.status = AgentStatus::Failed;
-                        }
-                    } else {
-                        let mut tasks_guard = tasks.write().await;
-                        if let Some(h) = tasks_guard.get_mut(&workspace_id_tasks) {
-                            h.status = AgentStatus::Completed;
-                        }
+                Ok(_stored) => {
+                    let mut tasks_guard = tasks.write().await;
+                    if let Some(h) = tasks_guard.get_mut(&workspace_id_owned) {
+                        h.status = AgentStatus::Completed;
                     }
                 }
                 Err(e) => {
-                    tracing::error!("Agent failed for workspace {} (goal {}): {}", workspace_id_tasks, goal_id_owned, e);
+                    tracing::error!(
+                        "Agent failed for workspace {} (goal {}): {}",
+                        workspace_id_owned, goal_id_owned, e
+                    );
                     let mut tasks_guard = tasks.write().await;
-                    if let Some(h) = tasks_guard.get_mut(&workspace_id_tasks) {
+                    if let Some(h) = tasks_guard.get_mut(&workspace_id_owned) {
                         h.status = AgentStatus::Failed;
                     }
-                    // Revert goal status on failure
-                    let _ = GoalsRepo::update_status(&db, &goal_id_owned, GoalStatus::Failed).await;
-                    emitter.emit_goal_status(&goal_id_owned, &GoalStatus::Failed.to_string(), &new_status.to_string());
+                    let _ = GoalsRepo::update_status(
+                        runtime.db(),
+                        &goal_id_owned,
+                        GoalStatus::Failed,
+                    ).await;
                 }
             }
         });
@@ -169,223 +183,43 @@ impl AgentSupervisor {
             handle.status = AgentStatus::Canceling;
             Ok(handle.status.clone())
         } else {
-            Err(AppError::NotFound(format!("No running agent for workspace: {}", workspace_id)))
+            Err(AppError::NotFound(format!(
+                "No running agent for workspace: {}",
+                workspace_id
+            )))
         }
     }
 
-    /// Get the status of the agent for a workspace
+    /// 查询 Agent 运行状态
     pub async fn get_status(&self, workspace_id: &str) -> Option<AgentStatus> {
         let tasks = self.tasks.read().await;
         tasks.get(workspace_id).map(|h| h.status.clone())
     }
 
-    /// Get all running agents
+    /// 列出所有运行中的 Agent
     pub async fn list_running(&self) -> Vec<(String, AgentType, AgentStatus)> {
         let tasks = self.tasks.read().await;
-        tasks.iter()
-            .filter(|(_, h)| h.status == AgentStatus::Running || h.status == AgentStatus::Starting)
+        tasks
+            .iter()
+            .filter(|(_, h)| {
+                h.status == AgentStatus::Running || h.status == AgentStatus::Starting
+            })
             .map(|(id, h)| (id.clone(), h.agent_type.clone(), h.status.clone()))
             .collect()
     }
-
-    /// Build the GoalContext from the database
-    async fn build_goal_context(&self, goal: &crate::workhub::Goal) -> AppResult<GoalContext> {
-        let current_milestone = match &goal.current_milestone_id {
-            Some(mid) => Some(MilestonesRepo::get_by_id(&self.db, mid).await?),
-            None => None,
-        };
-
-        let available_skills = match &current_milestone {
-            Some(m) => SkillsRepo::list_by_milestone(&self.db, &m.id).await?,
-            None => vec![],
-        };
-
-        let agent_logs = AgentLogsRepo::list_by_goal(&self.db, &goal.id).await?;
-
-        // Get WorkSpace info
-        let workspace = WorkHub::get_workspace_by_goal(&self.db, &goal.id).await?;
-        let (workspace_id, current_node_id) = match workspace {
-            Some(ws) => (Some(ws.id), ws.current_node_id),
-            None => (None, None),
-        };
-
-        // Resolve the appropriate session
-        // Summarizer gets temp in-memory session; others get node-persisted session
-        let session = if let Some(ref node_id) = current_node_id {
-            self.sessions.get_or_create_node(node_id)?
-        } else {
-            // Fallback: temp session via workspace_id (for Summarizer before node exists)
-            self.sessions.get_or_create_temp(workspace_id.as_deref().unwrap_or(&goal.id)).await
-        };
-
-        Ok(GoalContext {
-            goal: goal.clone(),
-            current_milestone,
-            available_skills,
-            agent_logs,
-            metadata: HashMap::new(),
-            workspace_id,
-            current_node_id,
-            session,
-        })
-    }
 }
 
-/// Determine which agent type should run based on goal status
+/// 确定 goal 状态对应的 agent 类型
 fn determine_agent_type(goal_status: GoalStatus) -> AppResult<AgentType> {
     match goal_status {
         GoalStatus::Draft => Ok(AgentType::Summarizer),
-        GoalStatus::Pinned => Ok(AgentType::Builder),      // Builder for initial achievement
-        GoalStatus::Building => Ok(AgentType::Builder),    // Resume building
-        GoalStatus::Reached => Ok(AgentType::Optimizer),   // Optimize after reached
-        GoalStatus::Optimizing => Ok(AgentType::Optimizer),// Resume optimization
-        GoalStatus::Failed => Ok(AgentType::Builder),      // Retry with Builder
+        GoalStatus::Pinned => Ok(AgentType::Builder),
+        GoalStatus::Building => Ok(AgentType::Builder),
+        GoalStatus::Reached => Ok(AgentType::Optimizer),
+        GoalStatus::Optimizing => Ok(AgentType::Optimizer),
+        GoalStatus::Failed => Ok(AgentType::Builder),
         GoalStatus::Archived => Err(AppError::Agent(format!(
             "No agent transition defined for goal status: archived"
         ))),
     }
-}
-
-/// Handle the output from an agent run — persist results to DB
-async fn handle_agent_output(
-    db: &DatabasePool,
-    goal_id: &str,
-    output: &AgentOutput,
-    emitter: &EventBridge,
-) -> AppResult<()> {
-    match output {
-        AgentOutput::GoalSummary {
-            title,
-            description,
-            acceptance_criteria,
-            constraints,
-            refinement_questions,
-        } => {
-            // Save the summary as JSON in the goal's summary field
-            let summary_json = serde_json::json!({
-                "title": title,
-                "description": description,
-                "acceptance_criteria": acceptance_criteria,
-                "constraints": constraints,
-                "refinement_questions": refinement_questions,
-            });
-            let summary_str = serde_json::to_string_pretty(&summary_json)?;
-
-            let _goal = GoalsRepo::update_summary(db, goal_id, &summary_str).await?;
-            let _ = GoalsRepo::update(db, goal_id, crate::workhub::UpdateGoalInput {
-                title: Some(title.clone()),
-                summary: None,
-                raw_input: None,
-            }).await;
-
-            // Transition back to draft so user can review and pin
-            GoalsRepo::update_status(db, goal_id, GoalStatus::Draft).await?;
-            emitter.emit_goal_status(goal_id, &GoalStatus::Draft.to_string(), &GoalStatus::Draft.to_string());
-
-            // Log the agent decision
-            AgentLogsRepo::append(
-                db, goal_id, "summarizer", "summarizing", "completed",
-                Some(&serde_json::to_string(&summary_json)?),
-            ).await?;
-        }
-
-        AgentOutput::BuilderResult {
-            milestone_id,
-            success,
-            failure_reason,
-            new_node_id,
-            skills_used,
-            ..
-        } => {
-            if *success {
-                // Goal reached
-                GoalsRepo::update_status(db, goal_id, GoalStatus::Reached).await?;
-                emitter.emit_goal_status(goal_id, &GoalStatus::Reached.to_string(), &GoalStatus::Building.to_string());
-
-                // Update milestone status
-                if !milestone_id.is_empty() {
-                    MilestonesRepo::update_status(db, milestone_id, "completed").await?;
-                    emitter.emit_milestone_status(milestone_id, "completed", "in_progress");
-                }
-
-                // Log the achievement
-                AgentLogsRepo::append(
-                    db, goal_id, "builder", "building", "reached",
-                    Some(&serde_json::json!({
-                        "new_node_id": new_node_id,
-                        "skills_used": skills_used,
-                    }).to_string()),
-                ).await?;
-            } else {
-                GoalsRepo::update_status(db, goal_id, GoalStatus::Failed).await?;
-                emitter.emit_goal_status(goal_id, &GoalStatus::Failed.to_string(), &GoalStatus::Building.to_string());
-
-                // Log the failure
-                AgentLogsRepo::append(
-                    db, goal_id, "builder", "building", "failed",
-                    failure_reason.as_ref().map(|s| s.as_str()),
-                ).await?;
-            }
-        }
-
-        AgentOutput::ExecutionResult {
-            milestone_id,
-            success,
-            failure_reason,
-            bugs_found,
-            ..
-        } => {
-            if *success {
-                GoalsRepo::update_status(db, goal_id, GoalStatus::Reached).await?;
-                emitter.emit_goal_status(goal_id, &GoalStatus::Reached.to_string(), &GoalStatus::Building.to_string());
-            } else {
-                GoalsRepo::update_status(db, goal_id, GoalStatus::Failed).await?;
-                emitter.emit_goal_status(goal_id, &GoalStatus::Failed.to_string(), &GoalStatus::Building.to_string());
-
-                // If we have a current node, persist bugs
-                if !bugs_found.is_empty() {
-                    // In real implementation: use WorkHub::add_node_bug for each bug
-                    tracing::info!("Execution found {} bugs", bugs_found.len());
-                }
-            }
-
-            if !milestone_id.is_empty() {
-                let status = if *success { "completed" } else { "failed" };
-                MilestonesRepo::update_status(db, milestone_id, status).await?;
-                emitter.emit_milestone_status(milestone_id, status, "in_progress");
-            }
-        }
-
-        AgentOutput::OptimizationResult {
-            milestone_id,
-            solidified,
-            optimizations,
-            new_node_id,
-        } => {
-            if *solidified {
-                GoalsRepo::update_status(db, goal_id, GoalStatus::Archived).await?;
-                emitter.emit_goal_status(goal_id, &GoalStatus::Archived.to_string(), &GoalStatus::Optimizing.to_string());
-            } else {
-                GoalsRepo::update_status(db, goal_id, GoalStatus::Reached).await?;
-                emitter.emit_goal_status(goal_id, &GoalStatus::Reached.to_string(), &GoalStatus::Optimizing.to_string());
-            }
-
-            if !milestone_id.is_empty() {
-                MilestonesRepo::update_status(db, milestone_id, "completed").await?;
-                emitter.emit_milestone_status(milestone_id, "completed", "in_progress");
-            }
-
-            // Log the optimization
-            AgentLogsRepo::append(
-                db, goal_id, "optimizer", "optimizing", "completed",
-                Some(&serde_json::json!({
-                    "solidified": solidified,
-                    "optimizations": optimizations.len(),
-                    "new_node_id": new_node_id,
-                }).to_string()),
-            ).await?;
-        }
-    }
-
-    Ok(())
 }

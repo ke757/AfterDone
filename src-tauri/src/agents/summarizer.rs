@@ -2,17 +2,22 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 use crate::agents::traits::SideCarAgent;
-use crate::agents::types::{AgentOutput, GoalContext};
+use crate::agents::types::{AgentOutput, RuntimeContext};
 use crate::adapter::Transport;
 use crate::workhub::{AgentType, GoalSummary};
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::{LlmProvider, PromptTemplate};
 
-/// Goal Summarization Agent.
-/// Supports multi-turn conversation: each invocation appends user input
-/// to the goal's session, and the LLM receives the full conversation
-/// history so it can refine the summary incrementally.
+/// Goal Summarization Agent — 对话式产品分析师
+///
+/// 不再从 `ctx.goal.raw_input` 读取用户输入，而是从 session 中读取完整对话历史。
+/// 每次 `run()` 处理一轮对话：将最新 user 消息 + 历史上下文发给 LLM。
+///
+/// 对话流程由 Supervisor 的 `deliver_message()` 驱动：
+///   用户发消息 → deliver_message → run() → 返回 ConversationTurn
+///   用户继续对话 → deliver_message → run() → 返回 ConversationTurn
+///   用户确认 → confirm_summary → 持久化到 DB
 pub struct GoalSummarizerAgent {
     cancel_token: tokio_util::sync::CancellationToken,
 }
@@ -31,7 +36,7 @@ impl SideCarAgent for GoalSummarizerAgent {
 
     async fn run(
         &self,
-        ctx: GoalContext,
+        ctx: RuntimeContext,
         _transport: Arc<dyn Transport>,
         llm: Arc<dyn LlmProvider>,
         emitter: EventBridge,
@@ -40,32 +45,20 @@ impl SideCarAgent for GoalSummarizerAgent {
 
         emitter.emit_agent_status(workspace_id, "summarizer", "running", "summarizing");
 
-        // 记录用户输入到 session
-        ctx.session.add_message("user", &ctx.goal.raw_input, "summarizer").await;
-
         let history = ctx.session.get_history();
-        let msg_count = ctx.session.message_count();
 
         let system_prompt = PromptTemplate::system_prompt(&AgentType::Summarizer);
 
-        // If there's prior history (multi-turn), include a refinement instruction
-        let user_prompt = if msg_count > 1 {
-            format!(
-                "[Conversation history shows {} prior exchanges.]\n\n\
-                 Latest user input:\n{}\n\n\
-                 Please update the goal summary considering all previous context. \
-                 Incorporate the new information while preserving the structure.",
-                msg_count - 1,
-                ctx.goal.raw_input,
-            )
-        } else {
-            format!(
-                "Please summarize the following goal description:\n\n{}",
-                ctx.goal.raw_input,
-            )
-        };
+        // 构造 user prompt：包含目标标题作为上下文
+        let user_prompt = format!(
+            "Goal context: the user is defining a goal titled \"{}\".\n\n\
+             Please review the conversation history above and respond conversationally. \
+             If you have enough information, produce the goal summary JSON. \
+             If not, ask clarifying questions.",
+            ctx.goal.title
+        );
 
-        // 使用流式处理向前端展示进度
+        // LLM 流式调用
         let mut stream = llm.stream(system_prompt, &user_prompt, &history).await?;
         let mut full_response = String::new();
 
@@ -97,22 +90,24 @@ impl SideCarAgent for GoalSummarizerAgent {
         // 记录 assistant 响应到 session
         ctx.session.add_message("assistant", &full_response, "summarizer").await;
 
-        let summary = parse_summary_response(&full_response)?;
+        // 尝试解析 GoalSummary
+        let summary_draft = try_parse_goal_summary(&full_response);
 
         emitter.emit_agent_status(workspace_id, "summarizer", "completed", "summarizing");
+
+        let message = full_response;
+        let has_summary = summary_draft.is_some();
+
         emitter.emit_agent_decision(
             workspace_id,
-            "goal_summarized",
-            "Generated structured goal summary",
-            serde_json::to_value(&summary).ok(),
+            if has_summary { "summary_ready" } else { "conversation_turn" },
+            &message,
+            summary_draft.as_ref().and_then(|s| serde_json::to_value(s).ok()),
         );
 
-        Ok(AgentOutput::GoalSummary {
-            title: summary.title,
-            description: summary.description,
-            acceptance_criteria: summary.acceptance_criteria,
-            constraints: summary.constraints,
-            refinement_questions: summary.refinement_questions,
+        Ok(AgentOutput::ConversationTurn {
+            message,
+            summary_draft,
         })
     }
 
@@ -122,32 +117,18 @@ impl SideCarAgent for GoalSummarizerAgent {
     }
 }
 
-/// Parse the LLM response into a GoalSummary.
-fn parse_summary_response(response: &str) -> AppResult<GoalSummary> {
-    // 将大型语言模型（LLM）的响应解析为 GoalSummary。
-    // 尝试从响应中提取JSON（可能被包裹在Markdown代码块中）
+/// 尝试从 LLM 响应中解析 GoalSummary。
+/// 如果能解析出完整的 JSON → 返回 Some；否则返回 None（说明这是一条普通对话消息）。
+fn try_parse_goal_summary(response: &str) -> Option<GoalSummary> {
     let json_str = extract_json(response);
 
-    match serde_json::from_str::<GoalSummary>(&json_str) {
-        Ok(summary) => Ok(summary),
-        Err(_) => Ok(GoalSummary {
-            title: "Goal".to_string(),
-            description: response.trim().to_string(),
-            acceptance_criteria: vec!["Goal must be verifiably completed".to_string()],
-            constraints: vec![],
-            refinement_questions: vec![
-                "Could you provide more details about this goal?".to_string()
-            ],
-        }),
-    }
+    serde_json::from_str::<GoalSummary>(&json_str).ok()
 }
 
-/// Extract JSON from a potentially markdown-wrapped response
+/// 从文本中提取 JSON（支持 ```json 代码块和裸 JSON）
 fn extract_json(text: &str) -> String {
-    // 从可能被Markdown包裹的响应中提取JSON
     let trimmed = text.trim();
 
-    // 检查是否包含Markdown代码块换行
     if let Some(start) = trimmed.find("```json") {
         if let Some(end) = trimmed.rfind("```") {
             let json_start = start + 7;
@@ -164,7 +145,6 @@ fn extract_json(text: &str) -> String {
         }
     }
 
-    // 检查原始JSON对象
     if trimmed.starts_with('{') {
         if let Some(end) = trimmed.rfind('}') {
             return trimmed[..=end].to_string();

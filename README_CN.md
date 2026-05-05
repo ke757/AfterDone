@@ -71,6 +71,20 @@ AfterDone/
     └── migrations/             # SQLite 迁移脚本
 ```
 
+## strategy文件结构
+```
+data_dir/{strategy_dir}/
+├── config.toml
+├── rig-your-goal.db
+└── nodes/
+    ├── <node_id_1>/
+    │   └── session.jsonl
+    ├── <node_id_2>/
+    │   └── session.jsonl
+    └── <node_id_3>/
+        └── session.jsonl
+```
+
 ## 关于
 
 项目正在积极迭代中，敬请期待！

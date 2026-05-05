@@ -17,10 +17,9 @@ pub async fn sessions_get_node(
     state: State<'_, AppState>,
 ) -> Result<SessionHistoryResponse, String> {
     let session = state
-        .supervisor
-        .sessions()
+        .sessions
         .get_or_create_node(&node_id)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e: crate::error::AppError| e.to_string())?;
 
     let messages = session.get_history();
 

@@ -13,7 +13,7 @@ use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
 use crate::agents::traits::SideCarAgent;
-use crate::agents::types::{GoalContext, AgentOutput, BugInfo};
+use crate::agents::types::{RuntimeContext, AgentOutput, BugInfo};
 use crate::workhub::{WorkHub, BugEntry};
 
 /// Maximum execution iterations
@@ -39,7 +39,7 @@ impl ExecutorAgent {
     /// Main execution loop
     async fn execute(
         &self,
-        ctx: &GoalContext,
+        ctx: &RuntimeContext,
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
     ) -> AppResult<ExecutionResult> {
@@ -174,7 +174,7 @@ impl ExecutorAgent {
     }
 
     /// Get user manual from current worknode
-    async fn get_user_manual(&self, ctx: &GoalContext) -> AppResult<String> {
+    async fn get_user_manual(&self, ctx: &RuntimeContext) -> AppResult<String> {
         // Try to get from current milestone/nodespace
         // For now, return a placeholder
         Ok(ctx.goal.summary.clone().unwrap_or_else(|| "No user manual available".to_string()))
@@ -183,7 +183,7 @@ impl ExecutorAgent {
     /// Decide next action using LLM
     async fn decide_action(
         &self,
-        ctx: &GoalContext,
+        ctx: &RuntimeContext,
         user_manual: &str,
         skills: &[crate::workhub::Skill],
         state: &ExecutionState,
@@ -285,7 +285,7 @@ impl SideCarAgent for ExecutorAgent {
 
     async fn run(
         &self,
-        ctx: GoalContext,
+        ctx: RuntimeContext,
         _transport: Arc<dyn Transport>,
         llm: Arc<dyn LlmProvider>,
         emitter: EventBridge,

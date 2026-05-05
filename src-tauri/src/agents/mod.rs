@@ -5,6 +5,7 @@ pub mod summarizer;
 pub mod executor;
 pub mod builder;
 pub mod optimizer;
+pub mod runtime;
 
 pub use types::*;
 pub use traits::SideCarAgent;

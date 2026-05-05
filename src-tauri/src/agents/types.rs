@@ -8,7 +8,7 @@ use crate::session::Session;
 /// Context passed to any agent on each run.
 /// Constructed by AgentSupervisor from the database before spawning.
 #[derive(Clone)]
-pub struct GoalContext {
+pub struct RuntimeContext {
     pub goal: Goal,
     pub current_milestone: Option<Milestone>,
     pub available_skills: Vec<Skill>,
@@ -26,7 +26,14 @@ pub struct GoalContext {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AgentOutput {
-    /// Output from the Summarizer agent
+    /// 一轮对话的中间结果：Agent 回复了消息，Summary 可能就绪或未就绪
+    /// 用于 deliver_message 模式下的多轮对话
+    ConversationTurn {
+        message: String,
+        /// 如果 LLM 已生成完整 GoalSummary JSON，此处有值
+        summary_draft: Option<crate::workhub::GoalSummary>,
+    },
+    /// Output from the Summarizer agent (确认后的最终结果)
     GoalSummary {
         title: String,
         description: String,

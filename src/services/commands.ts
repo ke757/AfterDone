@@ -48,6 +48,36 @@ export async function pinGoal(id: string): Promise<Goal> {
 }
 
 // ============================================================================
+// Summarizer Commands (对话式探需)
+// ============================================================================
+
+/**
+ * 投递一条用户消息给 Summarizer Agent，获取一轮对话响应
+ */
+export async function summarizerSendMessage(
+  workspaceId: string,
+  message: string
+): Promise<{ workspace_id: string; message: string; summary_ready: boolean }> {
+  return invoke('summarizer_send_message', { workspaceId, message });
+}
+
+/**
+ * 确认 Summarizer 生成的 GoalSummary，持久化到数据库
+ */
+export async function summarizerConfirm(workspaceId: string): Promise<Goal> {
+  return invoke<Goal>('summarizer_confirm', { workspaceId });
+}
+
+/**
+ * 查询 workspace 的当前 Summarizer 对话状态
+ */
+export async function summarizerStatus(
+  workspaceId: string
+): Promise<{ workspace_id: string; status: string | null }> {
+  return invoke('summarizer_status', { workspaceId });
+}
+
+// ============================================================================
 // Milestone Commands
 // ============================================================================
 

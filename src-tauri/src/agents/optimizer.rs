@@ -1,4 +1,4 @@
-﻿//! Optimizer Agent (鐩爣浼樺寲 Agent)
+﻿//! Optimizer Agent
 //!
 //! Responsible for optimizing achieved goals, fixing bugs, and solidifying.
 //! Core flow:
@@ -17,7 +17,7 @@ use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
 use crate::agents::traits::SideCarAgent;
-use crate::agents::types::{GoalContext, AgentOutput, Optimization};
+use crate::agents::types::{RuntimeContext, AgentOutput, Optimization};
 use crate::workhub::{WorkHub, TodoList, TodoItem, BugEntry};
 
 /// Maximum retry attempts
@@ -42,7 +42,7 @@ impl OptimizerAgent {
     /// Phase 1: Initial Analysis with History
     async fn analyze_with_history(
         &self,
-        ctx: &GoalContext,
+        ctx: &RuntimeContext,
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
     ) -> AppResult<TodoList> {
@@ -81,7 +81,7 @@ impl OptimizerAgent {
     /// Phase 2: Transform and Dispatch
     async fn dispatch_to_generator(
         &self,
-        ctx: &GoalContext,
+        ctx: &RuntimeContext,
         todo_list: &TodoList,
         _transport: &Arc<dyn Transport>,
         llm: &Arc<dyn LlmProvider>,
@@ -128,7 +128,7 @@ impl OptimizerAgent {
     /// Phase 3: Verification
     async fn verify(
         &self,
-        ctx: &GoalContext,
+        ctx: &RuntimeContext,
         generator_result: &GeneratorTaskResult,
         llm: &Arc<dyn LlmProvider>,
         emitter: &EventBridge,
@@ -177,7 +177,7 @@ impl OptimizerAgent {
     /// Phase 4: Conclusion with Bug Handling
     async fn conclude(
         &self,
-        ctx: &GoalContext,
+        ctx: &RuntimeContext,
         verification: &VerificationResult,
         generator_result: &GeneratorTaskResult,
         attempt: u32,
@@ -237,19 +237,19 @@ impl OptimizerAgent {
     }
 
     /// Get PLAN.md from workspace
-    async fn get_plan(&self, _ctx: &GoalContext) -> AppResult<Option<String>> {
+    async fn get_plan(&self, _ctx: &RuntimeContext) -> AppResult<Option<String>> {
         // In real implementation: WorkHub::get_plan
         Ok(None)
     }
 
     /// Get bugs from parent worknode
-    async fn get_parent_bugs(&self, _ctx: &GoalContext) -> AppResult<Vec<BugEntry>> {
+    async fn get_parent_bugs(&self, _ctx: &RuntimeContext) -> AppResult<Vec<BugEntry>> {
         // In real implementation: WorkHub::get_node_bug
         Ok(vec![])
     }
 
     /// Get conclusion from parent worknode
-    async fn get_parent_conclusion(&self, _ctx: &GoalContext) -> AppResult<Option<String>> {
+    async fn get_parent_conclusion(&self, _ctx: &RuntimeContext) -> AppResult<Option<String>> {
         // In real implementation: WorkHub::get_node_conclusion
         Ok(None)
     }
@@ -257,7 +257,7 @@ impl OptimizerAgent {
     /// Build analysis prompt with history
     fn build_analysis_prompt(
         &self,
-        ctx: &GoalContext,
+        ctx: &RuntimeContext,
         plan: &Option<String>,
         bugs: &[BugEntry],
         conclusion: &Option<String>,
@@ -351,7 +351,7 @@ Format your response as JSON:
     }
 
     /// Transform todo list to specification
-    fn transform_to_specification(&self, todo_list: &TodoList, ctx: &GoalContext) -> OptimizationSpec {
+    fn transform_to_specification(&self, todo_list: &TodoList, ctx: &RuntimeContext) -> OptimizationSpec {
         OptimizationSpec {
             goal_title: ctx.goal.title.clone(),
             direction: todo_list.direction_summary.clone(),
@@ -395,7 +395,7 @@ impl SideCarAgent for OptimizerAgent {
 
     async fn run(
         &self,
-        ctx: GoalContext,
+        ctx: RuntimeContext,
         transport: Arc<dyn Transport>,
         llm: Arc<dyn LlmProvider>,
         emitter: EventBridge,

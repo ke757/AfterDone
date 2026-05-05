@@ -3,6 +3,7 @@ use tokio::sync::RwLock;
 use tauri::AppHandle;
 
 use crate::agents::AgentSupervisor;
+use crate::agents::runtime::AgentRuntime;
 use crate::adapter::{MockTransport, Transport};
 use crate::config::AppConfig;
 use crate::db::DatabasePool;
@@ -17,6 +18,7 @@ pub struct AppState {
     pub config: Arc<RwLock<AppConfig>>,
     pub supervisor: Arc<AgentSupervisor>,
     pub sessions: Arc<SessionManager>,
+    pub emitter: EventBridge,
 }
 
 impl AppState {
@@ -28,7 +30,7 @@ impl AppState {
         // Create event emitter
         let emitter = EventBridge::new(app_handle);
 
-        // Create transport (using MockTransport for development)
+        // Create gen transport
         let transport: Arc<dyn Transport> = Arc::new(MockTransport::new());
 
         // Create LLM provider
@@ -37,20 +39,24 @@ impl AppState {
         // Create session manager
         let sessions = Arc::new(SessionManager::new());
 
-        // Create agent supervisor
-        let supervisor = Arc::new(AgentSupervisor::new(
+        // Create AgentRuntime（持有 transport, llm, sessions, emitter）
+        let runtime = Arc::new(AgentRuntime::new(
             db.clone(),
             transport,
             llm,
-            emitter,
+            emitter.clone(),
             sessions.clone(),
         ));
+
+        // Create AgentSupervisor（仅持有 runtime + tasks）
+        let supervisor = Arc::new(AgentSupervisor::new(runtime));
 
         Self {
             db,
             config: Arc::new(RwLock::new(config)),
             supervisor,
             sessions,
+            emitter,
         }
     }
 }
