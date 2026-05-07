@@ -392,7 +392,7 @@ Raw Input: {}
 
 "#,
             ctx.goal.title,
-            ctx.goal.raw_input
+            ctx.goal.content
         );
 
         if let Some(conclusion) = existing {

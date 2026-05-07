@@ -7,16 +7,16 @@ use crate::state::AppState;
 #[tauri::command]
 pub async fn goals_create(
     state: State<'_, AppState>,
-    raw_input: String,
+    content: String,
 ) -> AppResult<Goal> {
-    // Use the first line as title, rest as raw_input
-    let title = raw_input
+    // Use the first line as title, rest as content
+    let title = content
         .lines()
         .next()
         .unwrap_or("Untitled Goal")
         .to_string();
 
-    let input = CreateGoalInput { raw_input, title };
+    let input = CreateGoalInput { content, title };
     let goal = GoalsRepo::create(&state.db, input).await?;
 
     // Auto-trigger Summarizer agent (will be wired in lib.rs)
@@ -58,12 +58,12 @@ pub async fn goals_update(
     goal_id: String,
     title: Option<String>,
     summary: Option<String>,
-    raw_input: Option<String>,
+    content: Option<String>,
 ) -> AppResult<Goal> {
     let input = UpdateGoalInput {
         title,
         summary,
-        raw_input,
+        content,
     };
     GoalsRepo::update(&state.db, &goal_id, input).await
 }

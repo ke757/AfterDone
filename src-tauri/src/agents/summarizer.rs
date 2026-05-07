@@ -11,8 +11,7 @@ use crate::llm::{LlmProvider, PromptTemplate};
 
 /// Goal Summarization Agent — 对话式产品分析师
 ///
-/// 不再从 `ctx.goal.raw_input` 读取用户输入，而是从 session 中读取完整对话历史。
-/// 每次 `run()` 处理一轮对话：将最新 user 消息 + 历史上下文发给 LLM。
+/// 从 session 中读取完整对话历史。每次 `run()` 处理一轮对话：将最新 user 消息 + 历史上下文发给 LLM。
 ///
 /// 对话流程由 Supervisor 的 `deliver_message()` 驱动：
 ///   用户发消息 → deliver_message → run() → 返回 ConversationTurn

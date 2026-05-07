@@ -13,12 +13,12 @@ impl GoalsRepo {
         let now = chrono::Utc::now().to_rfc3339();
 
         sqlx::query(
-            "INSERT INTO goals (id, title, raw_input, status, created_at, updated_at)
+            "INSERT INTO goals (id, title, content, status, created_at, updated_at)
              VALUES (?, ?, ?, 'draft', ?, ?)"
         )
         .bind(&id)
         .bind(&input.title)
-        .bind(&input.raw_input)
+        .bind(&input.content)
         .bind(&now)
         .bind(&now)
         .execute(pool)
@@ -58,14 +58,14 @@ impl GoalsRepo {
 
         let title = input.title.unwrap_or(goal.title);
         let summary = input.summary.or(goal.summary);
-        let raw_input = input.raw_input.unwrap_or(goal.raw_input);
+        let content = input.content.unwrap_or(goal.content);
 
         sqlx::query(
-            "UPDATE goals SET title = ?, summary = ?, raw_input = ?, updated_at = ? WHERE id = ?"
+            "UPDATE goals SET title = ?, summary = ?, content = ?, updated_at = ? WHERE id = ?"
         )
         .bind(&title)
         .bind(&summary)
-        .bind(&raw_input)
+        .bind(&content)
         .bind(&now)
         .bind(id)
         .execute(pool)
@@ -111,13 +111,5 @@ impl GoalsRepo {
         }
 
         Ok(())
-    }
-
-    pub async fn get_children(pool: &SqlitePool, parent_id: &str) -> AppResult<Vec<Goal>> {
-        sqlx::query_as::<_, Goal>("SELECT * FROM goals WHERE parent_goal_id = ? ORDER BY created_at")
-            .bind(parent_id)
-            .fetch_all(pool)
-            .await
-            .map_err(AppError::Database)
     }
 }

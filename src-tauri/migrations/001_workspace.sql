@@ -8,13 +8,10 @@ CREATE TABLE IF NOT EXISTS goals (
     id TEXT PRIMARY KEY NOT NULL,
     title TEXT NOT NULL,
     summary TEXT,
-    raw_input TEXT NOT NULL,
+    content TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft',
-    parent_goal_id TEXT,
-    fork_context TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (parent_goal_id) REFERENCES goals(id) ON DELETE SET NULL
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Agent logs table: append-only log of agent activity
@@ -90,7 +87,6 @@ CREATE TABLE IF NOT EXISTS generator_tasks (
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
-CREATE INDEX IF NOT EXISTS idx_goals_parent ON goals(parent_goal_id);
 CREATE INDEX IF NOT EXISTS idx_agent_logs_goal ON agent_logs(goal_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_workspaces_goal ON workspaces(goal_id);
 CREATE INDEX IF NOT EXISTS idx_workspaces_current_node ON workspaces(current_node_id);

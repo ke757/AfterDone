@@ -17,12 +17,12 @@ impl WorkHub {
     pub async fn init_workspace(
         db: &SqlitePool,
         title: &str,
-        raw_input: &str,
+        content: &str,
     ) -> AppResult<WorkspaceInitResult> {
         // 1. 创建 Goal (status = Draft)
         let goal = GoalsRepo::create(db, CreateGoalInput {
             title: title.to_string(),
-            raw_input: raw_input.to_string(),
+            content: content.to_string(),
         }).await?;
 
         // 2. 创建 WorkSpace

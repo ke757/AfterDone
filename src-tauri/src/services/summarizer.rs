@@ -52,7 +52,7 @@ impl SummarizerService {
         GoalsRepo::update(pool, goal_id, crate::workhub::UpdateGoalInput {
             title: Some(summary.title.clone()),
             summary: None,
-            raw_input: None,
+            content: None,
         }).await?;
 
         Ok(goal)

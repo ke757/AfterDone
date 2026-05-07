@@ -52,16 +52,14 @@ impl TryFrom<&str> for GoalStatus {
     }
 }
 
-/// 目标
+/// Goal
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Goal {
     pub id: String,
-    pub title: String,
-    pub summary: Option<String>,
-    pub raw_input: String,
-    pub status: GoalStatus,
-    pub parent_goal_id: Option<String>,
-    pub fork_context: Option<String>,
+    pub title: String,              // 目标的标题，由 Summarizer agent 提炼生成
+    pub summary: Option<String>,    // 目标的摘要/简介，由 Summarizer agent 提炼生成
+    pub content: String,          // 目标的内容原文
+    pub status: GoalStatus,         // 目标的当前状态
     pub created_at: String,
     pub updated_at: String,
 }
@@ -69,7 +67,7 @@ pub struct Goal {
 /// 创建目标输入
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateGoalInput {
-    pub raw_input: String,
+    pub content: String,
     pub title: String,
 }
 
@@ -77,7 +75,7 @@ pub struct CreateGoalInput {
 pub struct UpdateGoalInput {
     pub title: Option<String>,
     pub summary: Option<String>,
-    pub raw_input: Option<String>,
+    pub content: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

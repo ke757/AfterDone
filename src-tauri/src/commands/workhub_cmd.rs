@@ -16,9 +16,9 @@ use crate::workhub::{
 pub async fn workspace_init(
     state: State<'_, AppState>,
     title: String,
-    raw_input: String,
+    content: String,
 ) -> AppResult<WorkspaceInitResult> {
-    WorkHub::init_workspace(&state.db, &title, &raw_input).await
+    WorkHub::init_workspace(&state.db, &title, &content).await
 }
 
 /// Get WorkSpace by goal ID
