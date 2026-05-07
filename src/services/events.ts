@@ -1,10 +1,8 @@
 /**
  * Tauri 事件监听工具
- * 封装 @tauri-apps/api/event 的监听函数
  */
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { AgentLog } from '../types/agent';
-import type { Message } from '../types/chat';
 
 // ============================================================================
 // Event Types
@@ -23,13 +21,6 @@ export interface GoalEvent {
   goal_id: string;
   event_type: 'created' | 'updated' | 'deleted' | 'status_changed';
   status?: string;
-  timestamp: string;
-}
-
-export interface MilestoneEvent {
-  milestone_id: string;
-  goal_id: string;
-  event_type: 'created' | 'updated' | 'deleted';
   timestamp: string;
 }
 
@@ -66,20 +57,6 @@ export function onGoalEvent(
   });
 }
 
-/**
- * 监听 Milestone 变化事件
- */
-export function onMilestoneEvent(
-  callback: (event: MilestoneEvent) => void
-): Promise<UnlistenFn> {
-  return listen<MilestoneEvent>('milestone:event', (event) => {
-    callback(event.payload);
-  });
-}
-
-/**
- * 监听聊天流式响应
- */
 export function onChatStream(
   callback: (event: ChatStreamEvent) => void
 ): Promise<UnlistenFn> {
@@ -103,9 +80,9 @@ export function onAgentLog(
  * 监听新消息
  */
 export function onNewMessage(
-  callback: (message: Message) => void
+  callback: (message: { role: string; content: string; agent_type: string; created_at: string }) => void
 ): Promise<UnlistenFn> {
-  return listen<Message>('chat:message', (event) => {
+  return listen('chat:message', (event: any) => {
     callback(event.payload);
   });
 }

@@ -33,7 +33,7 @@ function App() {
             <h2 className="text-lg font-semibold mb-4">Goals</h2>
             <p className="text-muted-foreground">
               Create and manage your goals. Each goal represents a persistent objective
-              that can be explored through milestones and skills.
+              that can be explored through the agent workbench.
             </p>
             <div className="mt-4">
               <button className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">

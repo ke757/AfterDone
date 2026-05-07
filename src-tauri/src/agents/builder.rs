@@ -531,7 +531,7 @@ impl SideCarAgent for BuilderAgent {
         loop {
             if self.cancel_token.is_cancelled() {
                 return Ok(AgentOutput::BuilderResult {
-                    milestone_id: ctx.goal.current_milestone_id.clone().unwrap_or_default(),
+                    milestone_id: String::new(),
                     plan: None,
                     skills_used: vec![],
                     success: false,
@@ -560,7 +560,7 @@ impl SideCarAgent for BuilderAgent {
 
             if conclusion.achieved || attempt >= self.max_retries {
                 return Ok(AgentOutput::BuilderResult {
-                    milestone_id: ctx.goal.current_milestone_id.clone().unwrap_or_default(),
+                    milestone_id: String::new(),
                     plan: serde_json::to_value(&plan).ok(),
                     skills_used: generator_result.skills.iter().map(|s| s.name.clone()).collect(),
                     success: conclusion.achieved,

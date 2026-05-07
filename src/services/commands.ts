@@ -3,147 +3,134 @@
  * 封装 @tauri-apps/api/command 的 invoke 函数
  */
 import { invoke } from '@tauri-apps/api/core';
-import type { Goal, GoalSummary, CreateGoalRequest } from '../types/goal';
-import type { Milestone, CreateMilestoneRequest } from '../types/milestone';
-import type { Skill, CreateSkillRequest } from '../types/skill';
-import type { Message } from '../types/chat';
+import type { Goal } from '../types/goal';
 import type { OpenClawConfig, LlmConfig } from '../types/settings';
 import type { AgentStatus, AgentLog } from '../types/agent';
-import type {
-  NodeSpace,
-  WorkNode,
-  BugEntry,
-} from '../types/noderepo';
+import type { WorkNode, BugEntry } from '../types/noderepo';
 
 // ============================================================================
 // Goal Commands
 // ============================================================================
 
 export async function listGoals(): Promise<Goal[]> {
-  return invoke<Goal[]>('list_goals');
+  return invoke<Goal[]>('goals_list');
 }
 
 export async function getGoal(id: string): Promise<Goal> {
-  return invoke<Goal>('get_goal', { id });
+  return invoke<Goal>('goals_get', { goalId: id });
 }
 
-export async function createGoal(request: CreateGoalRequest): Promise<Goal> {
-  return invoke<Goal>('create_goal', { request });
+export async function createGoal(rawInput: string): Promise<Goal> {
+  return invoke<Goal>('goals_create', { rawInput });
 }
 
-export async function updateGoal(id: string, request: Partial<CreateGoalRequest>): Promise<Goal> {
-  return invoke<Goal>('update_goal', { id, request });
+export async function updateGoal(
+  goalId: string,
+  title?: string,
+  summary?: string,
+  rawInput?: string,
+): Promise<Goal> {
+  return invoke<Goal>('goals_update', {
+    goalId,
+    title: title ?? null,
+    summary: summary ?? null,
+    rawInput: rawInput ?? null,
+  });
 }
 
 export async function deleteGoal(id: string): Promise<void> {
-  return invoke('delete_goal', { id });
+  return invoke('goals_delete', { goalId: id });
 }
 
-export async function summarizeGoal(id: string): Promise<GoalSummary> {
-  return invoke<GoalSummary>('summarize_goal', { id });
+export async function pinGoal(goalId: string): Promise<Goal> {
+  return invoke<Goal>('goals_pin', { goalId });
 }
 
-export async function pinGoal(id: string): Promise<Goal> {
-  return invoke<Goal>('pin_goal', { id });
+// ============================================================================
+// WorkSpace Commands
+// ============================================================================
+
+interface WorkSpace {
+  id: string;
+  goal_id: string;
+  current_node_id: string | null;
+  goal_md: string | null;
+  plan_md: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 初始化 Workspace — 创建 Goal + WorkSpace + RootNode */
+export async function workspaceInit(
+  title: string,
+  rawInput: string
+): Promise<{ workspace: WorkSpace; root_node_id: string; goal: Goal }> {
+  return invoke('workspace_init', { title, rawInput });
+}
+
+export async function workspaceList(): Promise<WorkSpace[]> {
+  return invoke<WorkSpace[]>('workspace_list');
+}
+
+export async function workspaceGetByGoal(goalId: string): Promise<WorkSpace | null> {
+  return invoke<WorkSpace | null>('workspace_get', { goalId });
 }
 
 // ============================================================================
 // Summarizer Commands (对话式探需)
 // ============================================================================
 
-/**
- * 投递一条用户消息给 Summarizer Agent，获取一轮对话响应
- */
+/** 投递一条用户消息给 Summarizer Cell，获取一轮对话响应 */
 export async function summarizerSendMessage(
-  workspaceId: string,
+  cellId: string,
   message: string
-): Promise<{ workspace_id: string; message: string; summary_ready: boolean }> {
-  return invoke('summarizer_send_message', { workspaceId, message });
+): Promise<{ cell_id: string; message: string; summary_ready: boolean }> {
+  return invoke('summarizer_send_message', { cellId, message });
 }
 
-/**
- * 确认 Summarizer 生成的 GoalSummary，持久化到数据库
- */
-export async function summarizerConfirm(workspaceId: string): Promise<Goal> {
-  return invoke<Goal>('summarizer_confirm', { workspaceId });
+/** 确认 Summarizer 生成的 GoalSummary，持久化到数据库 */
+export async function summarizerConfirm(cellId: string): Promise<Goal> {
+  return invoke<Goal>('summarizer_confirm', { cellId });
 }
 
-/**
- * 查询 workspace 的当前 Summarizer 对话状态
- */
+/** 查询 Cell 的当前结果状态 */
 export async function summarizerStatus(
-  workspaceId: string
-): Promise<{ workspace_id: string; status: string | null }> {
-  return invoke('summarizer_status', { workspaceId });
+  cellId: string
+): Promise<{ cell_id: string; result_status: string | null }> {
+  return invoke('summarizer_status', { cellId });
 }
 
 // ============================================================================
-// Milestone Commands
+// Cell Commands
 // ============================================================================
 
-export async function listMilestones(goalId: string): Promise<Milestone[]> {
-  return invoke<Milestone[]>('list_milestones', { goalId });
+export interface CellInfo {
+  cell_id: string;
+  agent_type: string;
+  status: string;
+  message_count: number;
+  result_status: string | null;
 }
 
-export async function getMilestone(id: string): Promise<Milestone> {
-  return invoke<Milestone>('get_milestone', { id });
+/** 创建新的 Cell */
+export async function cellCreate(
+  workspaceId: string,
+  nodeId: string,
+  agentType: string
+): Promise<CellInfo> {
+  return invoke<CellInfo>('cell_create', { workspaceId, nodeId, agentType });
 }
 
-export async function createMilestone(request: CreateMilestoneRequest): Promise<Milestone> {
-  return invoke<Milestone>('create_milestone', { request });
+/** 列出某 WorkNode 下所有 cells */
+export async function cellListByNode(nodeId: string): Promise<CellInfo[]> {
+  return invoke<CellInfo[]>('cell_list_by_node', { nodeId });
 }
 
-export async function updateMilestone(id: string, request: Partial<CreateMilestoneRequest>): Promise<Milestone> {
-  return invoke<Milestone>('update_milestone', { id, request });
-}
-
-export async function deleteMilestone(id: string): Promise<void> {
-  return invoke('delete_milestone', { id });
-}
-
-// ============================================================================
-// Skill Commands
-// ============================================================================
-
-export async function listSkills(goalId?: string): Promise<Skill[]> {
-  return invoke<Skill[]>('list_skills', { goalId });
-}
-
-export async function getSkill(id: string): Promise<Skill> {
-  return invoke<Skill>('get_skill', { id });
-}
-
-export async function createSkill(request: CreateSkillRequest): Promise<Skill> {
-  return invoke<Skill>('create_skill', { request });
-}
-
-export async function updateSkill(id: string, request: Partial<CreateSkillRequest>): Promise<Skill> {
-  return invoke<Skill>('update_skill', { id, request });
-}
-
-export async function deleteSkill(id: string): Promise<void> {
-  return invoke('delete_skill', { id });
-}
-
-// ============================================================================
-// Chat Commands
-// ============================================================================
-
-export async function getChatHistory(goalId: string): Promise<Message[]> {
-  return invoke<Message[]>('get_chat_history', { goalId });
-}
-
-export async function sendMessage(goalId: string, content: string): Promise<Message> {
-  return invoke<Message>('send_message', { goalId, content });
-}
-
-export async function streamMessage(
-  goalId: string,
-  content: string,
-  _onChunk: (chunk: string) => void
-): Promise<Message> {
-  // 流式消息发送，通过事件接收
-  return invoke<Message>('stream_message', { goalId, content });
+/** 获取 Cell 的完整会话历史 */
+export async function cellGetHistory(
+  cellId: string
+): Promise<{ cell_id: string; messages: Array<{ role: string; content: string; agent_type: string; created_at: string }> }> {
+  return invoke('cell_get_history', { cellId });
 }
 
 // ============================================================================
@@ -195,53 +182,27 @@ export async function testLlmConnection(): Promise<boolean> {
 }
 
 // ============================================================================
-// NodeSpace Commands
-// ============================================================================
-
-export async function nodespaceInit(goalId: string): Promise<NodeSpace> {
-  return invoke<NodeSpace>('nodespace_init', { goal_id: goalId });
-}
-
-export async function nodespaceGet(goalId: string): Promise<NodeSpace | null> {
-  return invoke<NodeSpace | null>('nodespace_get', { goal_id: goalId });
-}
-
-export async function nodespaceGetOrCreate(goalId: string): Promise<NodeSpace> {
-  return invoke<NodeSpace>('nodespace_get_or_create', { goal_id: goalId });
-}
-
-export async function nodespaceUpdatePlan(nodespaceId: string, content: string): Promise<void> {
-  return invoke('nodespace_update_plan', { nodespace_id: nodespaceId, content });
-}
-
-export async function nodespaceGetPlan(nodespaceId: string): Promise<string | null> {
-  return invoke<string | null>('nodespace_get_plan', { nodespace_id: nodespaceId });
-}
-
-// ============================================================================
 // WorkNode Commands
 // ============================================================================
 
 export async function worknodeCreateInitial(
-  nodespaceId: string,
-  milestoneId?: string
+  workspaceId: string
 ): Promise<WorkNode> {
   return invoke<WorkNode>('worknode_create_initial', { 
-    nodespace_id: nodespaceId, 
-    milestone_id: milestoneId 
+    workspace_id: workspaceId,
   });
 }
 
-export async function worknodeGetCurrent(nodespaceId: string): Promise<WorkNode | null> {
-  return invoke<WorkNode | null>('worknode_get_current', { nodespace_id: nodespaceId });
+export async function worknodeGetCurrent(workspaceId: string): Promise<WorkNode | null> {
+  return invoke<WorkNode | null>('worknode_get_current', { workspace_id: workspaceId });
 }
 
 export async function worknodeGet(nodeId: string): Promise<WorkNode | null> {
   return invoke<WorkNode | null>('worknode_get', { node_id: nodeId });
 }
 
-export async function worknodeList(nodespaceId: string): Promise<WorkNode[]> {
-  return invoke<WorkNode[]>('worknode_list', { nodespace_id: nodespaceId });
+export async function worknodeList(workspaceId: string): Promise<WorkNode[]> {
+  return invoke<WorkNode[]>('worknode_list', { workspace_id: workspaceId });
 }
 
 export async function worknodeGetBugs(nodeId: string): Promise<BugEntry[]> {
@@ -269,11 +230,11 @@ export async function worknodeGetUserManual(nodeId: string): Promise<string | nu
 }
 
 export async function worknodeGoalAchieved(
-  nodespaceId: string, 
+  workspaceId: string, 
   conclusion: string
 ): Promise<string> {
   return invoke<string>('worknode_goal_achieved', { 
-    nodespace_id: nodespaceId, 
+    workspace_id: workspaceId, 
     conclusion 
   });
 }

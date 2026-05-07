@@ -406,7 +406,7 @@ impl SideCarAgent for OptimizerAgent {
         loop {
             if self.cancel_token.is_cancelled() {
                 return Ok(AgentOutput::OptimizationResult {
-                    milestone_id: ctx.goal.current_milestone_id.clone().unwrap_or_default(),
+                    milestone_id: String::new(),
                     optimizations: vec![],
                     solidified: false,
                     new_node_id: None,
@@ -423,7 +423,7 @@ impl SideCarAgent for OptimizerAgent {
                     true,
                 );
                 return Ok(AgentOutput::OptimizationResult {
-                    milestone_id: ctx.goal.current_milestone_id.clone().unwrap_or_default(),
+                    milestone_id: String::new(),
                     optimizations: vec![],
                     solidified: true,
                     new_node_id: None,
@@ -453,7 +453,7 @@ impl SideCarAgent for OptimizerAgent {
 
             if conclusion.achieved || attempt >= self.max_retries {
                 return Ok(AgentOutput::OptimizationResult {
-                    milestone_id: ctx.goal.current_milestone_id.clone().unwrap_or_default(),
+                    milestone_id: String::new(),
                     optimizations: conclusion.optimizations,
                     solidified: conclusion.solidified,
                     new_node_id: conclusion.new_node_id,

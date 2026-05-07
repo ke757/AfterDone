@@ -12,16 +12,18 @@ impl WorkNodeRepo {
     pub async fn create(db: &SqlitePool, input: CreateWorkNodeInput) -> AppResult<WorkNode> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
-        let status = WorkNodeStatus::Planned.to_string();
+        let status = input.status.unwrap_or_else(|| WorkNodeStatus::Planned.to_string());
+        let node_type = input.node_type.unwrap_or_else(|| "version".to_string());
 
         sqlx::query(
-            "INSERT INTO worknodes (id, workspace_id, parent_node_id, node_order, status, milestone_id, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO worknodes (id, workspace_id, parent_node_id, node_order, node_type, status, milestone_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&id)
         .bind(&input.workspace_id)
         .bind(&input.parent_node_id)
         .bind(input.node_order)
+        .bind(&node_type)
         .bind(&status)
         .bind(&input.milestone_id)
         .bind(&now)
@@ -35,7 +37,7 @@ impl WorkNodeRepo {
     /// Get WorkNode by id
     pub async fn get_by_id(db: &SqlitePool, id: &str) -> AppResult<WorkNode> {
         sqlx::query_as::<_, WorkNode>(
-            "SELECT id, workspace_id, parent_node_id, node_order, status,
+            "SELECT id, workspace_id, parent_node_id, node_order, node_type, status,
                     bug_md, user_manual_md, conclusion_md, milestone_id,
                     plan_summary, result_summary, created_at, updated_at
              FROM worknodes WHERE id = ?"
@@ -49,7 +51,7 @@ impl WorkNodeRepo {
     /// List all WorkNodes for a WorkSpace
     pub async fn list_by_workspace(db: &SqlitePool, workspace_id: &str) -> AppResult<Vec<WorkNode>> {
         sqlx::query_as::<_, WorkNode>(
-            "SELECT id, workspace_id, parent_node_id, node_order, status,
+            "SELECT id, workspace_id, parent_node_id, node_order, node_type, status,
                     bug_md, user_manual_md, conclusion_md, milestone_id,
                     plan_summary, result_summary, created_at, updated_at
              FROM worknodes WHERE workspace_id = ?
@@ -64,7 +66,7 @@ impl WorkNodeRepo {
     /// Get children of a WorkNode
     pub async fn list_children(db: &SqlitePool, parent_id: &str) -> AppResult<Vec<WorkNode>> {
         sqlx::query_as::<_, WorkNode>(
-            "SELECT id, workspace_id, parent_node_id, node_order, status,
+            "SELECT id, workspace_id, parent_node_id, node_order, node_type, status,
                     bug_md, user_manual_md, conclusion_md, milestone_id,
                     plan_summary, result_summary, created_at, updated_at
              FROM worknodes WHERE parent_node_id = ?

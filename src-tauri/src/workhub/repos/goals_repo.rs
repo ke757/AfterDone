@@ -100,23 +100,6 @@ impl GoalsRepo {
         Self::get_by_id(pool, id).await
     }
 
-    pub async fn update_current_milestone(
-        pool: &SqlitePool,
-        id: &str,
-        milestone_id: Option<&str>,
-    ) -> AppResult<Goal> {
-        let now = chrono::Utc::now().to_rfc3339();
-
-        sqlx::query("UPDATE goals SET current_milestone_id = ?, updated_at = ? WHERE id = ?")
-            .bind(milestone_id)
-            .bind(&now)
-            .bind(id)
-            .execute(pool)
-            .await?;
-
-        Self::get_by_id(pool, id).await
-    }
-
     pub async fn delete(pool: &SqlitePool, id: &str) -> AppResult<()> {
         let result = sqlx::query("DELETE FROM goals WHERE id = ?")
             .bind(id)

@@ -27,17 +27,6 @@ pub struct GoalStatusPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MilestoneStatusPayload {
-    pub status: String,
-    pub previous: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkillStatusPayload {
-    pub status: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenClawConnectionPayload {
     pub connected: bool,
     pub url: String,

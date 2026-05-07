@@ -6,7 +6,7 @@ use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
 use crate::session::cell::result::{ResultStatus, StoredResult};
 use crate::workhub::{
-    AgentType, GoalsRepo, GoalStatus, MilestonesRepo, AgentLogsRepo,
+    AgentType, GoalsRepo, GoalStatus, AgentLogsRepo,
 };
 
 pub struct BuilderResultHandler;
@@ -48,7 +48,7 @@ impl ResultHandler for BuilderResultHandler {
 
         match output {
             AgentOutput::BuilderResult {
-                milestone_id,
+                milestone_id: _,
                 success,
                 failure_reason,
                 new_node_id,
@@ -57,9 +57,6 @@ impl ResultHandler for BuilderResultHandler {
             } => {
                 if success {
                     GoalsRepo::update_status(db, &stored.goal_id, GoalStatus::Reached).await?;
-                    if !milestone_id.is_empty() {
-                        MilestonesRepo::update_status(db, &milestone_id, "completed").await?;
-                    }
                     AgentLogsRepo::append(
                         db,
                         &stored.goal_id,

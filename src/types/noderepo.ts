@@ -27,7 +27,6 @@ export interface WorkNode {
   bug_md: string | null;
   user_manual_md: string | null;
   conclusion_md: string | null;
-  milestone_id: string | null;
   plan_summary: string | null;
   result_summary: string | null;
   created_at: string;
@@ -87,7 +86,6 @@ export interface CreateWorkNodeRequest {
   nodespace_id: string;
   parent_node_id?: string;
   node_order: number;
-  milestone_id?: string;
 }
 
 /**

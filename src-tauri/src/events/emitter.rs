@@ -58,21 +58,6 @@ impl EventBridge {
         });
     }
 
-    pub fn emit_milestone_status(&self, milestone_id: &str, status: &str, previous: &str) {
-        let event = format!("ryg:milestone:status:{}", milestone_id);
-        let _ = self.app.emit(&event, MilestoneStatusPayload {
-            status: status.to_string(),
-            previous: previous.to_string(),
-        });
-    }
-
-    pub fn emit_skill_status(&self, skill_id: &str, status: &str) {
-        let event = format!("ryg:skill:status:{}", skill_id);
-        let _ = self.app.emit(&event, SkillStatusPayload {
-            status: status.to_string(),
-        });
-    }
-
     pub fn emit_openclaw_connection(&self, connected: bool, url: &str) {
         let _ = self.app.emit("ryg:openclaw:connection", OpenClawConnectionPayload {
             connected,

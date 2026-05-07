@@ -13,5 +13,5 @@ pub mod repos;
 pub mod ops;
 
 pub use types::*;
-pub use repos::{GoalsRepo, MilestonesRepo, SkillsRepo, AgentLogsRepo, WorkSpaceRepo, WorkNodeRepo, GeneratorTaskRepo};
+pub use repos::{GoalsRepo, AgentLogsRepo, WorkSpaceRepo, WorkNodeRepo, GeneratorTaskRepo};
 pub use ops::WorkHub;

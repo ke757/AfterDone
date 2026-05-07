@@ -3,7 +3,7 @@
  * 管理 Goal 状态
  */
 import { create } from 'zustand';
-import type { Goal, GoalSummary, CreateGoalRequest } from '../types/goal';
+import type { Goal, GoalSummary } from '../types/goal';
 import * as commands from '../services/commands';
 
 interface GoalState {
@@ -16,11 +16,10 @@ interface GoalState {
   // Actions
   fetchGoals: () => Promise<void>;
   fetchGoal: (id: string) => Promise<void>;
-  createGoal: (request: CreateGoalRequest) => Promise<Goal>;
-  updateGoal: (id: string, request: Partial<CreateGoalRequest>) => Promise<void>;
+  createGoal: (rawInput: string) => Promise<Goal>;
+  updateGoal: (goalId: string, title?: string, summary?: string, rawInput?: string) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
-  summarizeGoal: (id: string) => Promise<void>;
-  pinGoal: (id: string) => Promise<void>;
+  pinGoal: (goalId: string) => Promise<void>;
   setCurrentGoal: (goal: Goal | null) => void;
   clearError: () => void;
 }
@@ -52,10 +51,10 @@ export const useGoalStore = create<GoalState>((set) => ({
     }
   },
 
-  createGoal: async (request: CreateGoalRequest) => {
+  createGoal: async (rawInput: string) => {
     set({ isLoading: true, error: null });
     try {
-      const goal = await commands.createGoal(request);
+      const goal = await commands.createGoal(rawInput);
       set((state) => ({
         goals: [...state.goals, goal],
         currentGoal: goal,
@@ -68,13 +67,13 @@ export const useGoalStore = create<GoalState>((set) => ({
     }
   },
 
-  updateGoal: async (id: string, request: Partial<CreateGoalRequest>) => {
+  updateGoal: async (goalId, title, summary, rawInput) => {
     set({ isLoading: true, error: null });
     try {
-      const goal = await commands.updateGoal(id, request);
+      const goal = await commands.updateGoal(goalId, title, summary, rawInput);
       set((state) => ({
-        goals: state.goals.map((g) => (g.id === id ? goal : g)),
-        currentGoal: state.currentGoal?.id === id ? goal : state.currentGoal,
+        goals: state.goals.map((g) => (g.id === goalId ? goal : g)),
+        currentGoal: state.currentGoal?.id === goalId ? goal : state.currentGoal,
         isLoading: false,
       }));
     } catch (error) {
@@ -96,23 +95,13 @@ export const useGoalStore = create<GoalState>((set) => ({
     }
   },
 
-  summarizeGoal: async (id: string) => {
+  pinGoal: async (goalId: string) => {
     set({ isLoading: true, error: null });
     try {
-      const summary = await commands.summarizeGoal(id);
-      set({ currentSummary: summary, isLoading: false });
-    } catch (error) {
-      set({ error: String(error), isLoading: false });
-    }
-  },
-
-  pinGoal: async (id: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      const goal = await commands.pinGoal(id);
+      const goal = await commands.pinGoal(goalId);
       set((state) => ({
-        goals: state.goals.map((g) => (g.id === id ? goal : g)),
-        currentGoal: state.currentGoal?.id === id ? goal : state.currentGoal,
+        goals: state.goals.map((g) => (g.id === goalId ? goal : g)),
+        currentGoal: state.currentGoal?.id === goalId ? goal : state.currentGoal,
         isLoading: false,
       }));
     } catch (error) {

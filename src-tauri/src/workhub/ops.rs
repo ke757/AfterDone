@@ -2,7 +2,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{AppError, AppResult};
 use super::types::*;
-use super::repos::{WorkSpaceRepo, WorkNodeRepo, GeneratorTaskRepo};
+use super::repos::{WorkSpaceRepo, WorkNodeRepo, GeneratorTaskRepo, GoalsRepo};
 
 /// Core WorkHub operations for agent tools
 pub struct WorkHub;
@@ -10,18 +10,43 @@ pub struct WorkHub;
 impl WorkHub {
     // ==================== WorkSpace Operations ====================
 
-    /// Initialize a WorkSpace for a goal
-    pub async fn init_workspace(db: &SqlitePool, goal_id: &str) -> AppResult<WorkSpace> {
-        // Check if already exists
-        if let Some(existing) = WorkSpaceRepo::get_by_goal_id(db, goal_id).await? {
-            return Ok(existing);
-        }
+    /// Initialize a WorkSpace from scratch — creates Goal + WorkSpace + RootNode
+    ///
+    /// RootNode (node_type="root") 是 workspace 的根节点，挂载 Goal 级别的 cells。
+    /// 版本节点 (node_type="version") 由 Builder 在后续阶段创建。
+    pub async fn init_workspace(
+        db: &SqlitePool,
+        title: &str,
+        raw_input: &str,
+    ) -> AppResult<WorkspaceInitResult> {
+        // 1. 创建 Goal (status = Draft)
+        let goal = GoalsRepo::create(db, CreateGoalInput {
+            title: title.to_string(),
+            raw_input: raw_input.to_string(),
+        }).await?;
 
-        WorkSpaceRepo::create(db, CreateWorkSpaceInput {
-            goal_id: goal_id.to_string(),
+        // 2. 创建 WorkSpace
+        let workspace = WorkSpaceRepo::create(db, CreateWorkSpaceInput {
+            goal_id: goal.id.clone(),
             goal_md: None,
             plan_md: None,
-        }).await
+        }).await?;
+
+        // 3. 创建 RootNode（node_type="root", status="active", node_order=0）
+        let root_node = WorkNodeRepo::create(db, CreateWorkNodeInput {
+            workspace_id: workspace.id.clone(),
+            parent_node_id: None,
+            node_order: 0,
+            milestone_id: None,
+            status: Some("active".to_string()),
+            node_type: Some("root".to_string()),
+        }).await?;
+
+        Ok(WorkspaceInitResult {
+            workspace,
+            root_node_id: root_node.id,
+            goal,
+        })
     }
     
     /// List all WorkSpaces
@@ -34,11 +59,26 @@ impl WorkHub {
         WorkSpaceRepo::get_by_goal_id(db, goal_id).await
     }
 
-    /// Get or create WorkSpace for a goal
+    /// Get or create WorkSpace + RootNode for an existing goal
     pub async fn get_or_create_workspace(db: &SqlitePool, goal_id: &str) -> AppResult<WorkSpace> {
         match WorkSpaceRepo::get_by_goal_id(db, goal_id).await? {
             Some(ws) => Ok(ws),
-            None => Self::init_workspace(db, goal_id).await,
+            None => {
+                let workspace = WorkSpaceRepo::create(db, CreateWorkSpaceInput {
+                    goal_id: goal_id.to_string(),
+                    goal_md: None,
+                    plan_md: None,
+                }).await?;
+                WorkNodeRepo::create(db, CreateWorkNodeInput {
+                    workspace_id: workspace.id.clone(),
+                    parent_node_id: None,
+                    node_order: 0,
+                    milestone_id: None,
+                    status: Some("active".to_string()),
+                    node_type: Some("root".to_string()),
+                }).await?;
+                Ok(workspace)
+            }
         }
     }
 
@@ -70,7 +110,7 @@ impl WorkHub {
 
     // ==================== WorkNode Operations ====================
 
-    /// Create initial worknode (for BuilderAgent)
+    /// Create initial worknode (for BuilderAgent) — node_type="version"
     pub async fn create_initial_worknode(db: &SqlitePool, workspace_id: &str) -> AppResult<WorkNode> {
         // Check if there's already a worknode
         let existing = WorkNodeRepo::list_by_workspace(db, workspace_id).await?;
@@ -83,6 +123,8 @@ impl WorkHub {
             parent_node_id: None,
             node_order: 0,
             milestone_id: None,
+            status: None,
+            node_type: None,
         }).await?;
 
         // Set as current node
@@ -200,6 +242,8 @@ impl WorkHub {
             parent_node_id: Some(current.id),
             node_order: current.node_order + 1,
             milestone_id: None,
+            status: None,
+            node_type: None,
         }).await?;
 
         // Set as current node
@@ -226,6 +270,8 @@ impl WorkHub {
             parent_node_id: Some(parent_node_id.to_string()),
             node_order: parent.node_order + 1,
             milestone_id: None,
+            status: None,
+            node_type: None,
         }).await?;
 
         // Set as current node

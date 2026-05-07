@@ -62,7 +62,6 @@ pub struct Goal {
     pub status: GoalStatus,
     pub parent_goal_id: Option<String>,
     pub fork_context: Option<String>,
-    pub current_milestone_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -88,139 +87,6 @@ pub struct GoalSummary {
     pub acceptance_criteria: Vec<String>,   // 验收标准
     pub constraints: Vec<String>,           // 约束
     pub refinement_questions: Vec<String>,  // 细化问题
-}
-
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct GoalTree {
-//     pub goal: Goal,
-//     pub children: Vec<GoalTree>,
-// }
-
-// ==================== Milestone Types ====================
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum MilestoneStatus {
-    Planned,
-    InProgress,
-    Completed,
-    Failed,
-    Pruned,
-}
-
-impl std::fmt::Display for MilestoneStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MilestoneStatus::Planned => write!(f, "planned"),
-            MilestoneStatus::InProgress => write!(f, "in_progress"),
-            MilestoneStatus::Completed => write!(f, "completed"),
-            MilestoneStatus::Failed => write!(f, "failed"),
-            MilestoneStatus::Pruned => write!(f, "pruned"),
-        }
-    }
-}
-
-impl TryFrom<&str> for MilestoneStatus {
-    type Error = String;
-    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
-        match s {
-            "planned" => Ok(MilestoneStatus::Planned),
-            "in_progress" => Ok(MilestoneStatus::InProgress),
-            "completed" => Ok(MilestoneStatus::Completed),
-            "failed" => Ok(MilestoneStatus::Failed),
-            "pruned" => Ok(MilestoneStatus::Pruned),
-            _ => Err(format!("Unknown milestone status: {}", s)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct Milestone {
-    pub id: String,
-    pub goal_id: String,
-    pub milestone_order: i32,
-    pub parent_milestone_id: Option<String>,
-    pub plan: Option<String>,
-    pub plan_summary: Option<String>,
-    pub skill_path: Option<String>,
-    pub status: String,
-    pub result_summary: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Plan {
-    pub steps: Vec<PlanStep>,
-    pub dependencies: Vec<(usize, usize)>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlanStep {
-    pub id: String,
-    pub description: String,
-    pub skill_requirements: Vec<SkillRequirement>,
-    pub status: PlanStepStatus,
-    pub result: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum PlanStepStatus {
-    Pending,
-    InProgress,
-    Completed,
-    Failed,
-}
-
-// ==================== Skill Types (产物) ====================
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum SkillStatus {
-    Requested,
-    Generated,
-    Verified,
-    Failed,
-}
-
-impl std::fmt::Display for SkillStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SkillStatus::Requested => write!(f, "requested"),
-            SkillStatus::Generated => write!(f, "generated"),
-            SkillStatus::Verified => write!(f, "verified"),
-            SkillStatus::Failed => write!(f, "failed"),
-        }
-    }
-}
-
-impl TryFrom<&str> for SkillStatus {
-    type Error = String;
-    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
-        match s {
-            "requested" => Ok(SkillStatus::Requested),
-            "generated" => Ok(SkillStatus::Generated),
-            "verified" => Ok(SkillStatus::Verified),
-            "failed" => Ok(SkillStatus::Failed),
-            _ => Err(format!("Unknown skill status: {}", s)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct Skill {
-    pub id: String,
-    pub milestone_id: String,
-    pub name: String,
-    pub description: String,
-    pub harness_skill_id: Option<String>,
-    pub parameters_schema: Option<String>,
-    pub test_report: Option<String>,
-    pub status: String,
-    pub source_code_ref: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
 }
 
 // ==================== AgentLog Types ====================
@@ -254,28 +120,6 @@ impl TryFrom<&str> for AgentType {
             "executor" => Ok(AgentType::Executor),
             "optimizer" => Ok(AgentType::Optimizer),
             _ => Err(format!("Unknown agent type: {}", s)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentEventKind {
-    Started,
-    Progress,
-    Decision,
-    Error,
-    Completed,
-}
-
-impl std::fmt::Display for AgentEventKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AgentEventKind::Started => write!(f, "started"),
-            AgentEventKind::Progress => write!(f, "progress"),
-            AgentEventKind::Decision => write!(f, "decision"),
-            AgentEventKind::Error => write!(f, "error"),
-            AgentEventKind::Completed => write!(f, "completed"),
         }
     }
 }
@@ -328,17 +172,19 @@ pub struct WorkSpace {
 }
 
 /// WorkNode: a milestone node in the node tree
+///
+/// node_type: "root" for workspace root, "version" for work version nodes
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct WorkNode {
     pub id: String,
     pub workspace_id: String,
     pub parent_node_id: Option<String>,
     pub node_order: i32,
+    pub node_type: String,
     pub status: String,
     pub bug_md: Option<String>,
     pub user_manual_md: Option<String>,
     pub conclusion_md: Option<String>,
-    pub milestone_id: Option<String>,
     pub plan_summary: Option<String>,
     pub result_summary: Option<String>,
     pub created_at: String,
@@ -430,6 +276,18 @@ pub struct CreateWorkNodeInput {
     pub parent_node_id: Option<String>,
     pub node_order: i32,
     pub milestone_id: Option<String>,
+    /// 自定义 status（不填则默认 Planned）
+    pub status: Option<String>,
+    /// 节点类型: "root" | "version"（默认 "version"）
+    pub node_type: Option<String>,
+}
+
+/// workspace_init 的返回结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceInitResult {
+    pub workspace: WorkSpace,
+    pub root_node_id: String,
+    pub goal: Goal,
 }
 
 /// Create GeneratorTask input

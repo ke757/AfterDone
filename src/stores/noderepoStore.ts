@@ -1,44 +1,55 @@
 /**
  * NodeRepo Store
- * Manages NodeSpace and WorkNode state using Zustand
+ * Manages WorkSpace and WorkNode state
  */
 import { create } from 'zustand';
 import type {
-  NodeSpace,
   WorkNode,
   BugEntry,
   WorkNodeTree,
 } from '../types/noderepo';
 import * as commands from '../services/commands';
 
+interface WorkSpace {
+  id: string;
+  goal_id: string;
+  current_node_id: string | null;
+  goal_md: string | null;
+  plan_md: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ============================================================================
-// NodeSpace Store
+// WorkSpace Store
 // ============================================================================
 
-interface NodeSpaceState {
-  current: NodeSpace | null;
+interface WorkSpaceState {
+  current: WorkSpace | null;
   isLoading: boolean;
   error: string | null;
 
   // Actions
-  init: (goalId: string) => Promise<NodeSpace | null>;
-  load: (goalId: string) => Promise<NodeSpace | null>;
-  updatePlan: (nodespaceId: string, content: string) => Promise<void>;
-  getPlan: (nodespaceId: string) => Promise<string | null>;
+  init: (title: string, rawInput: string) => Promise<{ root_node_id: string; goal_id: string; workspace_id: string } | null>;
+  load: (goalId: string) => Promise<WorkSpace | null>;
   clear: () => void;
 }
 
-export const useNodeSpaceStore = create<NodeSpaceState>((set) => ({
+export const useWorkSpaceStore = create<WorkSpaceState>((set) => ({
   current: null,
   isLoading: false,
   error: null,
 
-  init: async (goalId: string) => {
+  init: async (title, rawInput) => {
     set({ isLoading: true, error: null });
     try {
-      const nodespace = await commands.nodespaceGetOrCreate(goalId);
-      set({ current: nodespace, isLoading: false });
-      return nodespace;
+      const result = await commands.workspaceInit(title, rawInput);
+      set({ current: result.workspace, isLoading: false });
+      return {
+        root_node_id: result.root_node_id,
+        goal_id: result.goal.id,
+        workspace_id: result.workspace.id,
+      };
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       set({ isLoading: false, error });
@@ -49,33 +60,14 @@ export const useNodeSpaceStore = create<NodeSpaceState>((set) => ({
   load: async (goalId: string) => {
     set({ isLoading: true, error: null });
     try {
-      const nodespace = await commands.nodespaceGet(goalId);
-      set({ current: nodespace, isLoading: false });
-      return nodespace;
+      const ws = await commands.workspaceGetByGoal(goalId);
+      set({ current: ws, isLoading: false });
+      return ws;
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       set({ isLoading: false, error });
       return null;
     }
-  },
-
-  updatePlan: async (nodespaceId: string, content: string) => {
-    try {
-      await commands.nodespaceUpdatePlan(nodespaceId, content);
-      set((state) => ({
-        current: state.current?.id === nodespaceId 
-          ? { ...state.current, plan_md: content } 
-          : state.current,
-      }));
-    } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
-      set({ error });
-      throw e;
-    }
-  },
-
-  getPlan: async (nodespaceId: string) => {
-    return commands.nodespaceGetPlan(nodespaceId);
   },
 
   clear: () => {
@@ -96,14 +88,7 @@ interface WorkNodeState {
 
   // Actions
   loadForGoal: (goalId: string) => Promise<WorkNode[]>;
-  getCurrent: (nodespaceId: string) => Promise<WorkNode | null>;
-  createInitial: (nodespaceId: string, milestoneId?: string) => Promise<WorkNode | null>;
   loadBugs: (worknodeId: string) => Promise<BugEntry[]>;
-  addBug: (worknodeId: string, description: string, errorOutput?: string) => Promise<BugEntry | null>;
-  getConclusion: (worknodeId: string) => Promise<string | null>;
-  getUserManual: (worknodeId: string) => Promise<string | null>;
-  markGoalAchieved: (nodespaceId: string, conclusion: string) => Promise<string | null>;
-  markNodeAchieved: (parentNodeId: string, conclusion: string) => Promise<string | null>;
   clear: () => void;
 }
 
@@ -117,18 +102,14 @@ export const useWorkNodeStore = create<WorkNodeState>((set) => ({
   loadForGoal: async (goalId: string) => {
     set({ isLoading: true, error: null });
     try {
-      // First get the nodespace
-      const nodespace = await commands.nodespaceGet(goalId);
-      if (!nodespace) {
+      const ws = await commands.workspaceGetByGoal(goalId);
+      if (!ws) {
         set({ nodes: [], currentNode: null, isLoading: false });
         return [];
       }
 
-      // Load worknodes
-      const nodes = await commands.worknodeList(nodespace.id);
-
-      // Get current node
-      const currentNodeId = nodespace.current_node_id;
+      const nodes = await commands.worknodeList(ws.id);
+      const currentNodeId = ws.current_node_id;
       const currentNode = currentNodeId
         ? nodes.find((n) => n.id === currentNodeId) || null
         : null;
@@ -142,78 +123,13 @@ export const useWorkNodeStore = create<WorkNodeState>((set) => ({
     }
   },
 
-  getCurrent: async (nodespaceId: string) => {
-    try {
-      const node = await commands.worknodeGetCurrent(nodespaceId);
-      set({ currentNode: node });
-      return node;
-    } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
-      set({ error });
-      return null;
-    }
-  },
-
-  createInitial: async (nodespaceId: string, milestoneId?: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      const node = await commands.worknodeCreateInitial(nodespaceId, milestoneId);
-      set((state) => ({
-        nodes: [...state.nodes, node],
-        currentNode: node,
-        isLoading: false,
-      }));
-      return node;
-    } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
-      set({ isLoading: false, error });
-      return null;
-    }
-  },
-
   loadBugs: async (worknodeId: string) => {
     try {
       const bugs = await commands.worknodeGetBugs(worknodeId);
       set({ bugs });
       return bugs;
-    } catch (e) {
+    } catch {
       return [];
-    }
-  },
-
-  addBug: async (worknodeId: string, description: string, errorOutput?: string) => {
-    try {
-      const bug = await commands.worknodeAddBug(worknodeId, description, errorOutput);
-      set((state) => ({ bugs: [...state.bugs, bug] }));
-      return bug;
-    } catch (e) {
-      return null;
-    }
-  },
-
-  getConclusion: async (worknodeId: string) => {
-    return commands.worknodeGetConclusion(worknodeId);
-  },
-
-  getUserManual: async (worknodeId: string) => {
-    return commands.worknodeGetUserManual(worknodeId);
-  },
-
-  markGoalAchieved: async (nodespaceId: string, conclusion: string) => {
-    try {
-      const newNodeId = await commands.worknodeGoalAchieved(nodespaceId, conclusion);
-      return newNodeId;
-    } catch (e) {
-      return null;
-    }
-  },
-
-  markNodeAchieved: async (parentNodeId: string, conclusion: string) => {
-    try {
-      const newNodeId = await commands.worknodeAchieved(parentNodeId, conclusion);
-      return newNodeId;
-    } catch (e) {
-      return null;
     }
   },
 
@@ -226,9 +142,6 @@ export const useWorkNodeStore = create<WorkNodeState>((set) => ({
 // Helper Functions
 // ============================================================================
 
-/**
- * Build a tree structure from flat worknode list
- */
 export function buildWorkNodeTree(nodes: WorkNode[]): WorkNodeTree[] {
   const buildTree = (parentId: string | null = null): WorkNodeTree[] => {
     return nodes
@@ -241,11 +154,4 @@ export function buildWorkNodeTree(nodes: WorkNode[]): WorkNodeTree[] {
   };
 
   return buildTree();
-}
-
-/**
- * Get bugs for a specific worknode
- */
-export async function getWorkNodeBugs(worknodeId: string): Promise<BugEntry[]> {
-  return commands.worknodeGetBugs(worknodeId);
 }

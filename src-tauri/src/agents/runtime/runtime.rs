@@ -24,7 +24,7 @@ use crate::session::cell::{
     result::{StoredResult},
 };
 use crate::workhub::{
-    AgentType, GoalsRepo, MilestonesRepo, SkillsRepo, AgentLogsRepo,
+    AgentType, GoalsRepo, AgentLogsRepo,
     Goal, GoalStatus, WorkSpaceRepo, WorkHub,
 };
 
@@ -199,16 +199,6 @@ impl AgentRuntime {
         goal: &Goal,
         cell: Arc<dyn SessionCell>,
     ) -> AppResult<RuntimeContext> {
-        let current_milestone = match &goal.current_milestone_id {
-            Some(mid) => Some(MilestonesRepo::get_by_id(&self.db, mid).await?),
-            None => None,
-        };
-
-        let available_skills = match &current_milestone {
-            Some(m) => SkillsRepo::list_by_milestone(&self.db, &m.id).await?,
-            None => vec![],
-        };
-
         let agent_logs = AgentLogsRepo::list_by_goal(&self.db, &goal.id).await?;
 
         let workspace = WorkHub::get_workspace_by_goal(&self.db, &goal.id).await?;
@@ -219,8 +209,6 @@ impl AgentRuntime {
 
         Ok(RuntimeContext {
             goal: goal.clone(),
-            current_milestone,
-            available_skills,
             agent_logs,
             metadata: HashMap::new(),
             workspace_id,

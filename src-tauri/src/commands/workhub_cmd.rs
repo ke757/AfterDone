@@ -8,15 +8,17 @@ use crate::state::AppState;
 use crate::workhub::{
     WorkHub, WorkSpace, WorkNode, BugEntry,
     CreateWorkSpaceInput, CreateWorkNodeInput,
+    WorkspaceInitResult,
 };
 
-/// Initialize a WorkSpace for a goal
+/// Initialize a WorkSpace — creates Goal + WorkSpace + ShareNode in one call
 #[tauri::command]
 pub async fn workspace_init(
     state: State<'_, AppState>,
-    goal_id: String,
-) -> AppResult<WorkSpace> {
-    WorkHub::init_workspace(&state.db, &goal_id).await
+    title: String,
+    raw_input: String,
+) -> AppResult<WorkspaceInitResult> {
+    WorkHub::init_workspace(&state.db, &title, &raw_input).await
 }
 
 /// Get WorkSpace by goal ID

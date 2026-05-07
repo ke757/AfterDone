@@ -6,7 +6,7 @@ use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
 use crate::session::cell::result::{ResultStatus, StoredResult};
 use crate::workhub::{
-    AgentType, GoalsRepo, GoalStatus, MilestonesRepo,
+    AgentType, GoalsRepo, GoalStatus,
 };
 
 pub struct ExecutorResultHandler;
@@ -48,7 +48,7 @@ impl ResultHandler for ExecutorResultHandler {
 
         match output {
             AgentOutput::ExecutionResult {
-                milestone_id,
+                milestone_id: _,
                 success,
                 bugs_found,
                 ..
@@ -60,10 +60,6 @@ impl ResultHandler for ExecutorResultHandler {
                     if !bugs_found.is_empty() {
                         tracing::info!("Execution found {} bugs", bugs_found.len());
                     }
-                }
-                if !milestone_id.is_empty() {
-                    let status = if success { "completed" } else { "failed" };
-                    MilestonesRepo::update_status(db, &milestone_id, status).await?;
                 }
             }
             _ => {

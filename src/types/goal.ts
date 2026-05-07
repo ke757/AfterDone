@@ -6,7 +6,6 @@ export interface Goal {
   status: GoalStatus;
   parent_goal_id: string | null;
   fork_context: string | null;
-  current_milestone_id: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::workhub::{AgentType, Goal, Milestone, Skill, AgentLog};
+use crate::workhub::{AgentType, Goal, AgentLog};
 use crate::session::cell::SessionCell;
 
 /// Context passed to any agent on each run.
@@ -10,8 +10,6 @@ use crate::session::cell::SessionCell;
 #[derive(Clone)]
 pub struct RuntimeContext {
     pub goal: Goal,
-    pub current_milestone: Option<Milestone>,
-    pub available_skills: Vec<Skill>,
     pub agent_logs: Vec<AgentLog>,
     pub metadata: HashMap<String, serde_json::Value>,
     /// WorkSpace ID for the goal (if initialized)

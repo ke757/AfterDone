@@ -1,6 +1,6 @@
 /**
  * Chat Store
- * 管理聊天消息状态
+ * 管理聊天消息状态（基于 Cell）
  */
 import { create } from 'zustand';
 import type { Message } from '../types/chat';
@@ -15,8 +15,8 @@ interface ChatState {
   error: string | null;
 
   // Actions
-  fetchHistory: (goalId: string) => Promise<void>;
-  sendMessage: (goalId: string, content: string) => Promise<void>;
+  fetchHistory: (cellId: string) => Promise<void>;
+  sendMessage: (cellId: string, content: string) => Promise<void>;
   startStreaming: () => void;
   appendStreamChunk: (chunk: string) => void;
   endStreaming: () => void;
@@ -31,24 +31,21 @@ export const useChatStore = create<ChatState>((set) => ({
   isLoading: false,
   error: null,
 
-  fetchHistory: async (goalId: string) => {
+  fetchHistory: async (cellId: string) => {
     set({ isLoading: true, error: null });
     try {
-      const messages = await commands.getChatHistory(goalId);
-      set({ messages, isLoading: false });
+      const resp = await commands.cellGetHistory(cellId);
+      set({ messages: resp.messages, isLoading: false });
     } catch (error) {
       set({ error: String(error), isLoading: false });
     }
   },
 
-  sendMessage: async (goalId: string, content: string) => {
+  sendMessage: async (cellId: string, content: string) => {
     set({ isLoading: true, error: null });
     try {
-      const message = await commands.sendMessage(goalId, content);
-      set((state) => ({
-        messages: [...state.messages, message],
-        isLoading: false,
-      }));
+      await commands.summarizerSendMessage(cellId, content);
+      set({ isLoading: false });
     } catch (error) {
       set({ error: String(error), isLoading: false });
     }
@@ -77,7 +74,6 @@ export const useChatStore = create<ChatState>((set) => ({
   },
 }));
 
-// 初始化事件监听
 let unlistenStream: (() => void) | null = null;
 let unlistenMessage: (() => void) | null = null;
 

@@ -1,17 +1,13 @@
 export interface Message {
-  id: string;
-  goal_id: string;
-  role: MessageRole;
+  role: string;
   content: string;
-  metadata: string | null;
+  agent_type: string;
   created_at: string;
 }
 
 export type MessageRole =
   | 'user'
-  | 'agent_summarizer'
-  | 'agent_executor'
-  | 'agent_optimizer'
+  | 'assistant'
   | 'system';
 
 export interface ChatStreamChunk {
