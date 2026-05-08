@@ -16,14 +16,9 @@ impl WorkHub {
     /// 版本节点 (node_type="version") 由 Builder 在后续阶段创建。
     pub async fn init_workspace(
         db: &SqlitePool,
-        title: &str,
-        content: &str,
     ) -> AppResult<WorkspaceInitResult> {
         // 1. 创建 Goal (status = Draft)
-        let goal = GoalsRepo::create(db, CreateGoalInput {
-            title: title.to_string(),
-            content: content.to_string(),
-        }).await?;
+        let goal = GoalsRepo::create(db).await?;
 
         // 2. 创建 WorkSpace
         let workspace = WorkSpaceRepo::create(db, CreateWorkSpaceInput {

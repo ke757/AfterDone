@@ -30,7 +30,7 @@ interface WorkSpaceState {
   error: string | null;
 
   // Actions
-  init: (title: string, rawInput: string) => Promise<{ root_node_id: string; goal_id: string; workspace_id: string } | null>;
+  init: () => Promise<{ root_node_id: string; goal_id: string; workspace_id: string } | null>;
   load: (goalId: string) => Promise<WorkSpace | null>;
   clear: () => void;
 }
@@ -40,10 +40,10 @@ export const useWorkSpaceStore = create<WorkSpaceState>((set) => ({
   isLoading: false,
   error: null,
 
-  init: async (title, rawInput) => {
+  init: async () => {
     set({ isLoading: true, error: null });
     try {
-      const result = await commands.workspaceInit(title, rawInput);
+      const result = await commands.workspaceInit();
       set({ current: result.workspace, isLoading: false });
       return {
         root_node_id: result.root_node_id,

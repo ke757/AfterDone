@@ -64,12 +64,7 @@ pub struct Goal {
     pub updated_at: String,
 }
 
-/// 创建目标输入
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateGoalInput {
-    pub content: String,
-    pub title: String,
-}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateGoalInput {

@@ -3,8 +3,6 @@
 //! Manages the full lifecycle of goals and their associated workspaces.
 //! Contains all data models, repositories, and business operations for:
 //! - Goals (目标)
-//! - Milestones (里程碑)
-//! - Skills (产物)
 //! - AgentLogs (智能体日志)
 //! - WorkSpaces / WorkNodes / GeneratorTasks (工作区)
 

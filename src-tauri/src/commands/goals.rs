@@ -1,25 +1,15 @@
 use tauri::State;
 
-use crate::workhub::{CreateGoalInput, Goal, UpdateGoalInput, GoalsRepo, GoalStatus};
+use crate::workhub::{Goal, UpdateGoalInput, GoalsRepo, GoalStatus};
 use crate::error::AppResult;
 use crate::state::AppState;
 
 #[tauri::command]
 pub async fn goals_create(
     state: State<'_, AppState>,
-    content: String,
 ) -> AppResult<Goal> {
-    // Use the first line as title, rest as content
-    let title = content
-        .lines()
-        .next()
-        .unwrap_or("Untitled Goal")
-        .to_string();
+    let goal = GoalsRepo::create(&state.db).await?;
 
-    let input = CreateGoalInput { content, title };
-    let goal = GoalsRepo::create(&state.db, input).await?;
-
-    // Auto-trigger Summarizer agent (will be wired in lib.rs)
     Ok(goal)
 }
 

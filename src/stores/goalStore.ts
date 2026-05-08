@@ -16,7 +16,7 @@ interface GoalState {
   // Actions
   fetchGoals: () => Promise<void>;
   fetchGoal: (id: string) => Promise<void>;
-  createGoal: (rawInput: string) => Promise<Goal>;
+  createGoal: () => Promise<Goal>;
   updateGoal: (goalId: string, title?: string, summary?: string, rawInput?: string) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   pinGoal: (goalId: string) => Promise<void>;
@@ -51,10 +51,10 @@ export const useGoalStore = create<GoalState>((set) => ({
     }
   },
 
-  createGoal: async (rawInput: string) => {
+  createGoal: async () => {
     set({ isLoading: true, error: null });
     try {
-      const goal = await commands.createGoal(rawInput);
+      const goal = await commands.createGoal();
       set((state) => ({
         goals: [...state.goals, goal],
         currentGoal: goal,

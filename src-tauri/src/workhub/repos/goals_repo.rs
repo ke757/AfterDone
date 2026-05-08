@@ -8,17 +8,15 @@ use super::super::types::GoalStatus;
 pub struct GoalsRepo;
 
 impl GoalsRepo {
-    pub async fn create(pool: &SqlitePool, input: CreateGoalInput) -> AppResult<Goal> {
+    pub async fn create(pool: &SqlitePool) -> AppResult<Goal> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
 
         sqlx::query(
             "INSERT INTO goals (id, title, content, status, created_at, updated_at)
-             VALUES (?, ?, ?, 'draft', ?, ?)"
+             VALUES (?, '', '', 'draft', ?, ?)"
         )
         .bind(&id)
-        .bind(&input.title)
-        .bind(&input.content)
         .bind(&now)
         .bind(&now)
         .execute(pool)

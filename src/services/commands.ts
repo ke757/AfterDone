@@ -20,8 +20,8 @@ export async function getGoal(id: string): Promise<Goal> {
   return invoke<Goal>('goals_get', { goalId: id });
 }
 
-export async function createGoal(rawInput: string): Promise<Goal> {
-  return invoke<Goal>('goals_create', { rawInput });
+export async function createGoal(): Promise<Goal> {
+  return invoke<Goal>('goals_create');
 }
 
 export async function updateGoal(
@@ -61,11 +61,8 @@ interface WorkSpace {
 }
 
 /** 初始化 Workspace — 创建 Goal + WorkSpace + RootNode */
-export async function workspaceInit(
-  title: string,
-  rawInput: string
-): Promise<{ workspace: WorkSpace; root_node_id: string; goal: Goal }> {
-  return invoke('workspace_init', { title, rawInput });
+export async function workspaceInit(): Promise<{ workspace: WorkSpace; root_node_id: string; goal: Goal }> {
+  return invoke('workspace_init');
 }
 
 export async function workspaceList(): Promise<WorkSpace[]> {

@@ -15,10 +15,8 @@ use crate::workhub::{
 #[tauri::command]
 pub async fn workspace_init(
     state: State<'_, AppState>,
-    title: String,
-    content: String,
 ) -> AppResult<WorkspaceInitResult> {
-    WorkHub::init_workspace(&state.db, &title, &content).await
+    WorkHub::init_workspace(&state.db).await
 }
 
 /// Get WorkSpace by goal ID
