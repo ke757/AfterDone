@@ -124,8 +124,7 @@ pub async fn worknode_add_bug(
 /// Get conclusion from worknode
 #[tauri::command]
 pub async fn worknode_get_conclusion(
-    state: State<'_,
- AppState>,
+    state: State<'_, AppState>,
     node_id: String,
 ) -> AppResult<Option<String>> {
     WorkHub::get_node_conclusion(&state.db, &node_id).await

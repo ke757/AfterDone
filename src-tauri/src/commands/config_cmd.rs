@@ -1,5 +1,7 @@
+use std::path::Path;
 use std::time::Instant;
 use tauri::State;
+use serde::{Deserialize, Serialize};
 
 use crate::adapter::openclaw::{OpenClawClient, OpenClawConfig as GatewayConfig};
 use crate::config::{ConnectionTestResult, LlmConfig, OpenClawConfig};
@@ -7,6 +9,56 @@ use crate::error::AppResult;
 use crate::llm::LlmProvider;
 use crate::llm::RigProvider;
 use crate::state::AppState;
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataPathInfo {
+    pub path: String,
+    pub name: String,
+}
+
+/// 读应用的数据仓库路径
+#[tauri::command]
+pub async fn config_get_data_path(
+    state: State<'_, AppState>,
+) -> AppResult<DataPathInfo> {
+    let config = state.config.read().await;
+    let db_path = config.app.database_path.clone();
+    if db_path.is_empty() {
+        Ok(DataPathInfo {
+            path: String::new(),
+            name: String::new(),
+        })
+    } else {
+        let path = Path::new(&db_path);
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+        Ok(DataPathInfo { path: db_path, name })
+    }
+}
+
+/// 设置应用的数据仓库路径
+#[tauri::command]
+pub async fn config_set_data_path(
+    state: State<'_, AppState>,
+    path: String,
+) -> AppResult<DataPathInfo> {
+    let mut app_config = state.config.write().await;
+    app_config.app.database_path = path.clone();
+    crate::config::save_config(&app_config)?;
+    drop(app_config);
+
+    let path_obj = Path::new(&path);
+    let name = path_obj
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+    Ok(DataPathInfo { path, name })
+}
 
 #[tauri::command]
 pub async fn config_get_openclaw(

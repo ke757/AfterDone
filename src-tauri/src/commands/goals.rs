@@ -9,7 +9,6 @@ pub async fn goals_create(
     state: State<'_, AppState>,
 ) -> AppResult<Goal> {
     let goal = GoalsRepo::create(&state.db).await?;
-
     Ok(goal)
 }
 
@@ -38,7 +37,7 @@ pub async fn goals_pin(
     let goal = GoalsRepo::update_status(&state.db, &goal_id, GoalStatus::Pinned).await?;
 
     // TODO: Trigger Executor agent via supervisor
-
+    
     Ok(goal)
 }
 
@@ -65,26 +64,3 @@ pub async fn goals_delete(
 ) -> AppResult<()> {
     GoalsRepo::delete(&state.db, &goal_id).await
 }
-
-// #[tauri::command]
-// pub async fn goals_tree(
-//     state: State<'_, AppState>,
-//     goal_id: String,
-// ) -> AppResult<GoalTree> {
-//     let goal = GoalsRepo::get_by_id(&state.db, &goal_id).await?;
-//     let children = GoalsRepo::get_children(&state.db, &goal_id).await?;
-
-//     // Simple single-level tree (recursive tree building can be added later)
-//     let child_trees = children
-//         .into_iter()
-//         .map(|c| GoalTree {
-//             goal: c,
-//             children: vec![],
-//         })
-//         .collect();
-
-//     Ok(GoalTree {
-//         goal,
-//         children: child_trees,
-//     })
-// }

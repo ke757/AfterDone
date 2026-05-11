@@ -179,6 +179,23 @@ export async function testLlmConnection(): Promise<boolean> {
 }
 
 // ============================================================================
+// Data Path Commands
+// ============================================================================
+
+export interface DataPathInfo {
+  path: string;
+  name: string;
+}
+
+export async function configGetDataPath(): Promise<DataPathInfo> {
+  return invoke<DataPathInfo>('config_get_data_path');
+}
+
+export async function configSetDataPath(path: string): Promise<DataPathInfo> {
+  return invoke<DataPathInfo>('config_set_data_path', { path });
+}
+
+// ============================================================================
 // WorkNode Commands
 // ============================================================================
 

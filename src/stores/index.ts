@@ -1,7 +1,3 @@
-/**
- * Stores 模块入口
- * 导出所有 Zustand stores
- */
 export { useGoalStore } from './goalStore';
 export { useChatStore, initChatListeners, cleanupChatListeners } from './chatStore';
 export { useSettingsStore } from './settingsStore';
@@ -11,6 +7,7 @@ export {
   useWorkNodeStore,
   buildWorkNodeTree,
 } from './noderepoStore';
+export { useUIStore } from './uiStore';
 
 // 从各模块导入函数
 import { initChatListeners, cleanupChatListeners } from './chatStore';

@@ -18,6 +18,7 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Initialize config
             let config = config::load_config().unwrap_or_else(|e| {
@@ -67,6 +68,8 @@ pub fn run() {
             commands::config_cmd::config_set_llm,
             commands::config_cmd::config_test_openclaw,
             commands::config_cmd::config_test_llm,
+            commands::config_cmd::config_get_data_path,
+            commands::config_cmd::config_set_data_path,
             // WorkSpace & WorkNode commands
             commands::workhub_cmd::workspace_init,
             commands::workhub_cmd::workspace_list,
