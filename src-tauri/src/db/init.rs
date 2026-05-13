@@ -1,5 +1,7 @@
+use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::SqlitePool;
 use std::path::Path;
+use std::str::FromStr;
 
 use crate::error::{AppError, AppResult};
 
@@ -9,13 +11,17 @@ pub async fn init_db(database_path: &Path) -> AppResult<SqlitePool> {
     }
 
     let db_url = format!(
-        "sqlite:{}?foreign_keys=on",
-        database_path.to_string_lossy()
+        "sqlite:///{}",
+        database_path.to_string_lossy().replace('\\', "/")
     );
 
-    let pool = SqlitePool::connect(&db_url).await.map_err(|e| {
-        AppError::Database(sqlx::Error::Configuration(e.to_string().into()))
-    })?;
+    let options = SqliteConnectOptions::from_str(&db_url)?
+        .foreign_keys(true)
+        .create_if_missing(true);
+
+    let pool = SqlitePool::connect_with(options)
+        .await
+        .map_err(|e| AppError::Database(sqlx::Error::Configuration(e.to_string().into())))?;
 
     run_migrations(&pool).await?;
 

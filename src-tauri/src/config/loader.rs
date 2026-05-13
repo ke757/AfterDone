@@ -3,11 +3,12 @@ use std::path::PathBuf;
 use crate::config::AppConfig;
 use crate::error::{AppError, AppResult};
 
+/// 默认路径在 data_dir 的 AfterDone
 pub fn config_dir() -> AppResult<PathBuf> {
     let base = dirs::data_dir().ok_or_else(|| {
         AppError::Config("Cannot determine application data directory".to_string())
     })?;
-    Ok(base.join("rig-your-goal"))
+    Ok(base.join("AfterDone"))
 }
 
 pub fn config_file_path() -> AppResult<PathBuf> {
@@ -16,7 +17,7 @@ pub fn config_file_path() -> AppResult<PathBuf> {
 
 pub fn database_path(config: &AppConfig) -> AppBuf {
     if config.app.database_path.is_empty() {
-        Ok(config_dir()?.join("rig-your-goal.db"))
+        Ok(config_dir()?.join("after-done.db"))
     } else {
         Ok(PathBuf::from(&config.app.database_path))
     }
@@ -50,6 +51,7 @@ pub fn save_config(config: &AppConfig) -> AppResult<()> {
     Ok(())
 }
 
+/// 环境变量覆盖至 config
 fn apply_env_overrides(mut config: AppConfig) -> AppConfig {
     if let Ok(val) = std::env::var("RYG_OPENCLAW_URL") {
         config.openclaw.gateway_url = val;

@@ -36,10 +36,9 @@ pub fn run() {
 
             // Initialize database
             let db_path = config::loader::database_path(&config)
-                .unwrap_or_else(|_| std::path::PathBuf::from("rig-your-goal.db"));
+                .unwrap_or_else(|_| std::path::PathBuf::from("after-done.db"));
 
-            let runtime = tokio::runtime::Handle::current();
-            let db = runtime.block_on(async { db::init_db(&db_path).await })
+            let db = tauri::async_runtime::block_on(async { db::init_db(&db_path).await })
                 .expect("Failed to initialize database");
 
             // Get app handle for EventBridge
