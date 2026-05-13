@@ -9,6 +9,9 @@ export function RightSidebar() {
   const { width, onMouseDown } = useResizable(
     rightSidebarWidth,
     setRightSidebarWidth,
+    160,
+    400,
+    true,
   );
 
   return (

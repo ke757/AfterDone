@@ -1,10 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
 
+// 拖动调整边栏宽度
 export function useResizable(
   initialWidth: number,
   onResize: (width: number) => void,
   min = 160,
   max = 400,
+  reverse = false,
 ) {
   const [width, setWidth] = useState(initialWidth);
   const isResizing = useRef(false);
@@ -23,7 +25,7 @@ export function useResizable(
 
       const onMouseMove = (ev: MouseEvent) => {
         if (!isResizing.current) return;
-        const delta = ev.clientX - startX.current;
+        const delta = reverse ? startX.current - ev.clientX : ev.clientX - startX.current;
         const newWidth = Math.min(max, Math.max(min, startWidth.current + delta));
         setWidth(newWidth);
         onResize(newWidth);
