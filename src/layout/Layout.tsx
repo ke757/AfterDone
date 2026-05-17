@@ -21,7 +21,7 @@ export function Layout() {
     );
   }
 
-  if (initStatus === 'first_launch') {
+  if (initStatus === 'initialize') {
     return (
       <div className="flex h-screen flex-col bg-background text-foreground">
         <QuickStartPage />

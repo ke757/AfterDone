@@ -4,33 +4,10 @@ import { useUIStore } from '@/stores/uiStore';
 
 export function QuickStartPage() {
   const currentRepoPath = useUIStore((s) => s.currentRepoPath);
-  const currentRepoName = useUIStore((s) => s.currentRepoName);
   const needRestart = useUIStore((s) => s.needRestart);
   const initError = useUIStore((s) => s.initError);
   const selectRepo = useUIStore((s) => s.selectRepo);
   const completeInit = useUIStore((s) => s.completeInit);
-
-  if (needRestart) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="flex max-w-md flex-col items-center gap-6 rounded-lg border border-border bg-card p-8 text-center shadow-sm">
-          <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
-            <span className="text-2xl font-bold text-primary">AD</span>
-          </div>
-          <h2 className="text-xl font-semibold text-foreground">AfterDone</h2>
-          <div className="flex flex-col items-center gap-3">
-            <div className="rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-primary">
-              ResourceRepo 已设置为「{currentRepoName}」，请重启应用以生效。
-            </div>
-            <Button variant="outline" size="lg" className="gap-2" onClick={() => window.close()}>
-              <RefreshCw className="size-4" />
-              关闭应用
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-full items-center justify-center">
@@ -59,9 +36,21 @@ export function QuickStartPage() {
             <FolderOpen className="size-4" />
             自定义路径
           </Button>
-          <Button size="lg" onClick={completeInit}>
-            开始使用
-          </Button>
+          {needRestart ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                路径已更改，需要重启应用才能生效
+              </p>
+              <Button size="lg" className="gap-2" onClick={() => window.close()}>
+                <RefreshCw className="size-4" />
+                确认并重启
+              </Button>
+            </>
+          ) : (
+            <Button size="lg" onClick={completeInit}>
+              开始使用
+            </Button>
+          )}
         </div>
       </div>
     </div>

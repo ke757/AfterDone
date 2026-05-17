@@ -7,7 +7,7 @@ export function WelcomePage() {
         </div>
         <h2 className="text-xl font-semibold text-foreground">AfterDone</h2>
         <p className="text-sm text-muted-foreground">
-          Now you can open workspace on the left.
+          Now you can open a workspace.
         </p>
       </div>
     </div>

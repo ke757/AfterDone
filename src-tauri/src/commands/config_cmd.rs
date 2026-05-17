@@ -45,6 +45,7 @@ pub async fn config_set_resource_repo_path(
     Ok(ResourceRepoInfo { path, name })
 }
 
+/// App init status
 #[tauri::command]
 pub async fn app_get_init_status(
     state: State<'_, AppState>,
@@ -62,6 +63,7 @@ pub async fn app_get_init_status(
     })
 }
 
+/// QuickStartPage init
 #[tauri::command]
 pub async fn app_complete_init(
     state: State<'_, AppState>,

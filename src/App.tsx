@@ -5,12 +5,12 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from 'sonner';
 
 function App() {
-  const initApp = useUIStore((state) => state.initApp);
+  const launchApp = useUIStore((state) => state.launchApp);
   const initStatus = useUIStore((state) => state.initStatus);
 
   useEffect(() => {
-    initApp();
-  }, [initApp]);
+    launchApp();
+  }, [launchApp]);
 
   useEffect(() => {
     if (initStatus === 'ready') {
