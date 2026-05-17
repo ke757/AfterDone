@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tauri::AppHandle;
 
 use crate::agents::AgentSupervisor;
@@ -11,10 +10,9 @@ use crate::events::EventBridge;
 use crate::llm::{LlmProvider, RigProvider};
 use crate::session::CellManager;
 
-/// Application state shared across all Tauri commands.
 pub struct AppState {
     pub db: DatabasePool,
-    pub config: Arc<RwLock<AppConfig>>,
+    pub config: Arc<tokio::sync::RwLock<AppConfig>>,
     pub supervisor: Arc<AgentSupervisor>,
     pub cell_manager: Arc<CellManager>,
     pub emitter: EventBridge,
@@ -50,7 +48,7 @@ impl AppState {
 
         Self {
             db,
-            config: Arc::new(RwLock::new(config)),
+            config: Arc::new(tokio::sync::RwLock::new(config)),
             supervisor,
             cell_manager,
             emitter,

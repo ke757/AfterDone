@@ -33,7 +33,7 @@ pub async fn goals_pin(
     state: State<'_, AppState>,
     goal_id: String,
 ) -> AppResult<Goal> {
-    let previous = GoalsRepo::get_by_id(&state.db, &goal_id).await?;
+    let _previous = GoalsRepo::get_by_id(&state.db, &goal_id).await?;
     let goal = GoalsRepo::update_status(&state.db, &goal_id, GoalStatus::Pinned).await?;
 
     // TODO: Trigger Executor agent via supervisor

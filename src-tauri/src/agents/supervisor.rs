@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 
 use crate::agents::runtime::AgentRuntime;
 use crate::agents::types::{AgentStatus, AgentTaskHandle};
@@ -100,7 +101,7 @@ impl AgentSupervisor {
             }
         }
 
-        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let cancel_token = CancellationToken::new();
         let handle = AgentTaskHandle {
             agent_type: agent_type.clone(),
             cancel_token: cancel_token.clone(),

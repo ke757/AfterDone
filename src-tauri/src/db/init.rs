@@ -11,7 +11,7 @@ pub async fn init_db(database_path: &Path) -> AppResult<SqlitePool> {
     }
 
     let db_url = format!(
-        "sqlite:///{}",
+        "sqlite:///{}?mode=rwc",
         database_path.to_string_lossy().replace('\\', "/")
     );
 

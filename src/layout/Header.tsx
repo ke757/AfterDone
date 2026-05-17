@@ -35,7 +35,7 @@ export function Header() {
             <Button variant="ghost" size="default" className="gap-1 font-medium">
               <FolderOpen className="size-4" />
               <span className="max-w-[200px] truncate">
-                {repoName ?? '未选择仓库'}
+                {repoName ?? 'AfterDone'}
               </span>
               <ChevronDown className="size-3" />
             </Button>
@@ -51,7 +51,7 @@ export function Header() {
               onClick={() => selectRepo()}
             >
               <FolderOpen className="mr-2 size-4" />
-              数据仓库
+              数据仓库（需重启）
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => setActivePage('about')}

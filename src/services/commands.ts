@@ -179,20 +179,33 @@ export async function testLlmConnection(): Promise<boolean> {
 }
 
 // ============================================================================
-// Data Path Commands
+// ResourceRepo Commands
 // ============================================================================
 
-export interface DataPathInfo {
+export interface ResourceRepoInfo {
   path: string;
   name: string;
 }
 
-export async function configGetDataPath(): Promise<DataPathInfo> {
-  return invoke<DataPathInfo>('config_get_data_path');
+export interface AppInitStatus {
+  initialized: boolean;
+  resource_repo_path: string;
 }
 
-export async function configSetDataPath(path: string): Promise<DataPathInfo> {
-  return invoke<DataPathInfo>('config_set_data_path', { path });
+export async function configGetResourceRepoPath(): Promise<ResourceRepoInfo> {
+  return invoke<ResourceRepoInfo>('config_get_resource_repo_path');
+}
+
+export async function configSetResourceRepoPath(path: string): Promise<ResourceRepoInfo> {
+  return invoke<ResourceRepoInfo>('config_set_resource_repo_path', { path });
+}
+
+export async function appGetInitStatus(): Promise<AppInitStatus> {
+  return invoke<AppInitStatus>('app_get_init_status');
+}
+
+export async function appCompleteInit(): Promise<AppInitStatus> {
+  return invoke<AppInitStatus>('app_complete_init');
 }
 
 // ============================================================================

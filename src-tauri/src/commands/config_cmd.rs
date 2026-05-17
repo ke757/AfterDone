@@ -1,53 +1,38 @@
 use std::path::Path;
 use std::time::Instant;
 use tauri::State;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::adapter::openclaw::{OpenClawClient, OpenClawConfig as GatewayConfig};
-use crate::config::{ConnectionTestResult, LlmConfig, OpenClawConfig};
+use crate::config::{ConnectionTestResult, LlmConfig, OpenClawConfig, ResourceRepoInfo, AppInitStatus};
 use crate::error::AppResult;
 use crate::llm::LlmProvider;
 use crate::llm::RigProvider;
 use crate::state::AppState;
 
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataPathInfo {
-    pub path: String,
-    pub name: String,
-}
-
-/// 读应用的数据仓库路径
 #[tauri::command]
-pub async fn config_get_data_path(
+pub async fn config_get_resource_repo_path(
     state: State<'_, AppState>,
-) -> AppResult<DataPathInfo> {
+) -> AppResult<ResourceRepoInfo> {
     let config = state.config.read().await;
-    let db_path = config.app.database_path.clone();
-    if db_path.is_empty() {
-        Ok(DataPathInfo {
-            path: String::new(),
-            name: String::new(),
-        })
-    } else {
-        let path = Path::new(&db_path);
-        let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unknown")
-            .to_string();
-        Ok(DataPathInfo { path: db_path, name })
-    }
+    let path = crate::config::loader::resource_db_path(&config)?;
+    let path_str = path.to_string_lossy().to_string();
+    let name = path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("repository")
+        .to_string();
+    Ok(ResourceRepoInfo { path: path_str, name })
 }
 
-/// 设置应用的数据仓库路径
 #[tauri::command]
-pub async fn config_set_data_path(
+pub async fn config_set_resource_repo_path(
     state: State<'_, AppState>,
     path: String,
-) -> AppResult<DataPathInfo> {
+) -> AppResult<ResourceRepoInfo> {
     let mut app_config = state.config.write().await;
-    app_config.app.database_path = path.clone();
+    app_config.app.resource_repo_path = path.clone();
     crate::config::save_config(&app_config)?;
     drop(app_config);
 
@@ -57,7 +42,43 @@ pub async fn config_set_data_path(
         .and_then(|n| n.to_str())
         .unwrap_or("unknown")
         .to_string();
-    Ok(DataPathInfo { path, name })
+    Ok(ResourceRepoInfo { path, name })
+}
+
+#[tauri::command]
+pub async fn app_get_init_status(
+    state: State<'_, AppState>,
+) -> AppResult<AppInitStatus> {
+    let config = state.config.read().await;
+    let repo_path = if config.app.resource_repo_path.is_empty() {
+        let default_path = crate::config::loader::config_dir()?.join("repository");
+        default_path.to_string_lossy().to_string()
+    } else {
+        config.app.resource_repo_path.clone()
+    };
+    Ok(AppInitStatus {
+        initialized: config.app.initialized,
+        resource_repo_path: repo_path,
+    })
+}
+
+#[tauri::command]
+pub async fn app_complete_init(
+    state: State<'_, AppState>,
+) -> AppResult<AppInitStatus> {
+    let mut app_config = state.config.write().await;
+    app_config.app.initialized = true;
+    crate::config::save_config(&app_config)?;
+    let repo_path = if app_config.app.resource_repo_path.is_empty() {
+        let default_path = crate::config::loader::config_dir()?.join("repository");
+        default_path.to_string_lossy().to_string()
+    } else {
+        app_config.app.resource_repo_path.clone()
+    };
+    Ok(AppInitStatus {
+        initialized: true,
+        resource_repo_path: repo_path,
+    })
 }
 
 #[tauri::command]

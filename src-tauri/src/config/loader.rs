@@ -15,11 +15,12 @@ pub fn config_file_path() -> AppResult<PathBuf> {
     Ok(config_dir()?.join("config.toml"))
 }
 
-pub fn database_path(config: &AppConfig) -> AppBuf {
-    if config.app.database_path.is_empty() {
-        Ok(config_dir()?.join("after-done.db"))
+pub fn resource_db_path(config: &AppConfig) -> AppResult<PathBuf> {
+    if config.app.resource_repo_path.is_empty() {
+        let base = config_dir()?;
+        Ok(base.join("repository").join("after-done.db"))
     } else {
-        Ok(PathBuf::from(&config.app.database_path))
+        Ok(PathBuf::from(&config.app.resource_repo_path).join("after-done.db"))
     }
 }
 
@@ -70,6 +71,9 @@ fn apply_env_overrides(mut config: AppConfig) -> AppConfig {
     }
     if let Ok(val) = std::env::var("RYG_LOG_LEVEL") {
         config.app.log_level = val;
+    }
+    if let Ok(val) = std::env::var("RYG_RESOURCE_REPO_PATH") {
+        config.app.resource_repo_path = val;
     }
     config
 }

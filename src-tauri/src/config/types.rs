@@ -137,7 +137,9 @@ impl std::fmt::Display for LlmProviderType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     #[serde(default)]
-    pub database_path: String,
+    pub resource_repo_path: String,
+    #[serde(default)]
+    pub initialized: bool,
     #[serde(default = "default_max_concurrent_agents")]
     pub max_concurrent_agents: u32,
     #[serde(default = "default_log_level")]
@@ -155,11 +157,24 @@ fn default_log_level() -> String {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            database_path: String::new(),
+            resource_repo_path: String::new(),
+            initialized: false,
             max_concurrent_agents: default_max_concurrent_agents(),
             log_level: default_log_level(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceRepoInfo {
+    pub path: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppInitStatus {
+    pub initialized: bool,
+    pub resource_repo_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

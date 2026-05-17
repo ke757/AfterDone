@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as commands from '@/services/commands';
 
 export type ActivePage = 'welcome' | 'workspace' | 'settings' | 'about' | 'repo';
+export type InitStatus = 'loading' | 'first_launch' | 'ready';
 
 interface UIState {
   leftSidebarVisible: boolean;
@@ -11,18 +12,18 @@ interface UIState {
   currentRepoName: string | null;
   currentRepoPath: string | null;
   activePage: ActivePage;
-  repoInitialized: boolean;
+  initStatus: InitStatus;
   needRestart: boolean;
+  initError: string | null;
 
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
   setLeftSidebarWidth: (w: number) => void;
   setRightSidebarWidth: (w: number) => void;
-  setRepo: (name: string | null, path: string | null) => void;
   setActivePage: (page: ActivePage) => void;
-  initRepo: () => Promise<void>;
+  initApp: () => Promise<void>;
   selectRepo: () => Promise<void>;
-  dismissRestart: () => void;
+  completeInit: () => Promise<void>;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -33,59 +34,64 @@ export const useUIStore = create<UIState>((set) => ({
   currentRepoName: null,
   currentRepoPath: null,
   activePage: 'welcome',
-  repoInitialized: false,
+  initStatus: 'loading',
   needRestart: false,
+  initError: null,
 
-  toggleLeftSidebar: () =>
-    set((s) => ({ leftSidebarVisible: !s.leftSidebarVisible })),
-
-  toggleRightSidebar: () =>
-    set((s) => ({ rightSidebarVisible: !s.rightSidebarVisible })),
-
+  toggleLeftSidebar: () => set((s) => ({ leftSidebarVisible: !s.leftSidebarVisible })),
+  toggleRightSidebar: () => set((s) => ({ rightSidebarVisible: !s.rightSidebarVisible })),
   setLeftSidebarWidth: (w: number) => set({ leftSidebarWidth: w }),
   setRightSidebarWidth: (w: number) => set({ rightSidebarWidth: w }),
-
-  setRepo: (name, path) =>
-    set({ currentRepoName: name, currentRepoPath: path, repoInitialized: true }),
-
   setActivePage: (page) => set({ activePage: page }),
 
-  initRepo: async () => {
+  initApp: async () => {
     try {
-      const info = await commands.configGetDataPath();
-      if (info.path) {
+      const status = await commands.appGetInitStatus();
+      if (status.initialized) {
+        const info = await commands.configGetResourceRepoPath();
         set({
-          currentRepoName: info.name,
-          currentRepoPath: info.path,
-          repoInitialized: true,
+          initStatus: 'ready',
+          currentRepoName: info.name || null,
+          currentRepoPath: info.path || null,
           activePage: 'workspace',
         });
       } else {
-        set({ repoInitialized: true, activePage: 'welcome' });
+        set({
+          initStatus: 'first_launch',
+          currentRepoPath: status.resource_repo_path,
+          activePage: 'welcome',
+        });
       }
     } catch {
-      set({ repoInitialized: true, activePage: 'welcome' });
+      set({ initStatus: 'first_launch', activePage: 'welcome' });
     }
   },
 
   selectRepo: async () => {
     const { open } = await import('@tauri-apps/plugin-dialog');
-    const selected = await open({
-      directory: true,
-      multiple: false,
-    });
+    const selected = await open({ directory: true, multiple: false });
     if (selected && typeof selected === 'string') {
       try {
-        const info = await commands.configSetDataPath(selected);
+        const info = await commands.configSetResourceRepoPath(selected);
         set({
-          currentRepoName: info.name,
-          currentRepoPath: info.path,
+          currentRepoName: info.name || null,
+          currentRepoPath: info.path || null,
           needRestart: true,
         });
       } catch (e) {
-        console.error('Failed to set data path:', e);
+        set({ initError: e instanceof Error ? e.message : String(e) });
       }
     }
   },
-dismissRestart: () => set({ needRestart: false }),
+
+  completeInit: async () => {
+    try {
+      const status = await commands.appCompleteInit();
+      if (status.initialized) {
+        set({ initStatus: 'ready', activePage: 'workspace' });
+      }
+    } catch (e) {
+      set({ initError: e instanceof Error ? e.message : String(e) });
+    }
+  },
 }));

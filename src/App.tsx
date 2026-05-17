@@ -1,24 +1,25 @@
 import { useEffect } from 'react';
-import { useUIStore, initAllListeners, cleanupAllListeners, useGoalStore, useAgentStore } from './stores';
+import { useUIStore, initAllListeners, cleanupAllListeners } from './stores';
 import { Layout } from './layout/Layout';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from 'sonner';
 
 function App() {
-  const fetchGoals = useGoalStore((state) => state.fetchGoals);
-  const fetchStatus = useAgentStore((state) => state.fetchStatus);
-  const initRepo = useUIStore((state) => state.initRepo);
+  const initApp = useUIStore((state) => state.initApp);
+  const initStatus = useUIStore((state) => state.initStatus);
 
   useEffect(() => {
-    initAllListeners();
-    fetchGoals();
-    fetchStatus();
-    initRepo();
+    initApp();
+  }, [initApp]);
 
+  useEffect(() => {
+    if (initStatus === 'ready') {
+      initAllListeners();
+    }
     return () => {
       cleanupAllListeners();
     };
-  }, [fetchGoals, fetchStatus, initRepo]);
+  }, [initStatus]);
 
   return (
     <TooltipProvider>

@@ -35,15 +35,13 @@ pub fn run() {
                 .init();
 
             // Initialize database
-            let db_path = config::loader::database_path(&config)
-                .unwrap_or_else(|_| std::path::PathBuf::from("after-done.db"));
+            let app_handle = app.handle().clone();
 
+            let db_path = config::loader::resource_db_path(&config)
+                .expect("Failed to determine database path");
             let db = tauri::async_runtime::block_on(async { db::init_db(&db_path).await })
                 .expect("Failed to initialize database");
 
-            // Get app handle for EventBridge
-            // for Streamly
-            let app_handle = app.handle().clone();
             let state = AppState::new(db, config, app_handle);
             app.manage(state);
 
@@ -67,9 +65,10 @@ pub fn run() {
             commands::config_cmd::config_set_llm,
             commands::config_cmd::config_test_openclaw,
             commands::config_cmd::config_test_llm,
-            commands::config_cmd::config_get_data_path,
-            commands::config_cmd::config_set_data_path,
-            // WorkSpace & WorkNode commands
+            commands::config_cmd::config_get_resource_repo_path,
+            commands::config_cmd::config_set_resource_repo_path,
+            commands::config_cmd::app_get_init_status,
+            commands::config_cmd::app_complete_init,
             commands::workhub_cmd::workspace_init,
             commands::workhub_cmd::workspace_list,
             commands::workhub_cmd::workspace_get,

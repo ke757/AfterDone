@@ -5,6 +5,7 @@
 
 use serde::Serialize;
 use tauri::State;
+use std::sync::Arc;
 
 use crate::workhub::Goal;
 use crate::error::AppResult;
@@ -12,7 +13,6 @@ use crate::session::cell::result::{ResultStatus, StoredResult};
 use crate::session::cell::SessionCell;
 use crate::state::AppState;
 use crate::services::SummarizerService;
-use std::sync::Arc;
 
 /// 投递一条用户消息给 Summarizer Cell 并获取响应
 #[tauri::command]
