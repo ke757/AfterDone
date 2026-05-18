@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import * as commands from '@/services/commands';
 
-export type ActivePage = 'welcome' | 'workspace' | 'settings' | 'about' | 'repo';
+export type ActivePage = 'welcome' | 'workspace';
+export type DialogPage = 'settings' | 'about' | null;
 export type InitStatus = 'loading' | 'initialize' | 'ready';
 
 interface UIState {
@@ -13,6 +14,7 @@ interface UIState {
   currentRepoPath: string | null;
   initialRepoPath: string | null;
   activePage: ActivePage;
+  dialogPage: DialogPage;
   initStatus: InitStatus;
   needRestart: boolean;
   initError: string | null;
@@ -22,6 +24,7 @@ interface UIState {
   setLeftSidebarWidth: (w: number) => void;
   setRightSidebarWidth: (w: number) => void;
   setActivePage: (page: ActivePage) => void;
+  setDialogPage: (page: DialogPage) => void;
   launchApp: () => Promise<void>;
   selectRepo: () => Promise<void>;
   completeInit: () => Promise<void>;
@@ -36,6 +39,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   currentRepoPath: null,
   initialRepoPath: null,
   activePage: 'welcome',
+  dialogPage: null,
   initStatus: 'loading',
   needRestart: false,
   initError: null,
@@ -45,6 +49,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   setLeftSidebarWidth: (w: number) => set({ leftSidebarWidth: w }),
   setRightSidebarWidth: (w: number) => set({ rightSidebarWidth: w }),
   setActivePage: (page) => set({ activePage: page }),
+  setDialogPage: (page) => set({ dialogPage: page }),
 
   launchApp: async () => {
     try {

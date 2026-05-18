@@ -6,11 +6,20 @@ import { WelcomePage } from '@/features/welcome/WelcomePage';
 import { QuickStartPage } from '@/features/welcome/QuickStartPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { AboutPage } from '@/features/about/AboutPage';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 export function Layout() {
   const leftSidebarVisible = useUIStore((s) => s.leftSidebarVisible);
   const rightSidebarVisible = useUIStore((s) => s.rightSidebarVisible);
   const activePage = useUIStore((s) => s.activePage);
+  const dialogPage = useUIStore((s) => s.dialogPage);
+  const setDialogPage = useUIStore((s) => s.setDialogPage);
   const initStatus = useUIStore((s) => s.initStatus);
 
   if (initStatus === 'loading') {
@@ -39,16 +48,32 @@ export function Layout() {
             <div className="flex h-full items-center justify-center text-muted-foreground">
               工作空间内容（开发中）
             </div>
-          ) : activePage === 'settings' ? (
-            <SettingsPage />
-          ) : activePage === 'about' ? (
-            <AboutPage />
           ) : (
             <WelcomePage />
           )}
         </main>
         {rightSidebarVisible && <RightSidebar />}
       </div>
+
+      <Dialog open={dialogPage === 'settings'} onOpenChange={(open) => !open && setDialogPage(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>设置</DialogTitle>
+            <DialogDescription>应用设置</DialogDescription>
+          </DialogHeader>
+          <SettingsPage />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialogPage === 'about'} onOpenChange={(open) => !open && setDialogPage(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>关于 AfterDone</DialogTitle>
+            <DialogDescription>Goal Persistence Agent Workbench</DialogDescription>
+          </DialogHeader>
+          <AboutPage />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

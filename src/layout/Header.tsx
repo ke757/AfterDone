@@ -24,7 +24,7 @@ export function Header() {
   const repoName = useUIStore((s) => s.currentRepoName);
   const toggleLeftSidebar = useUIStore((s) => s.toggleLeftSidebar);
   const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
-  const setActivePage = useUIStore((s) => s.setActivePage);
+  const setDialogPage = useUIStore((s) => s.setDialogPage);
   const selectRepo = useUIStore((s) => s.selectRepo);
 
   return (
@@ -42,7 +42,7 @@ export function Header() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuItem
-              onClick={() => setActivePage('settings')}
+              onClick={() => setDialogPage('settings')}
             >
               <Settings className="mr-2 size-4" />
               设置
@@ -54,7 +54,7 @@ export function Header() {
               数据仓库（需重启）
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => setActivePage('about')}
+              onClick={() => setDialogPage('about')}
             >
               <Info className="mr-2 size-4" />
               关于
