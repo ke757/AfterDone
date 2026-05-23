@@ -103,7 +103,8 @@ export async function summarizerStatus(
 
 export interface CellInfo {
   cell_id: string;
-  agent_type: string;
+  cell_type: string;
+  agent_type: string | null;
   status: string;
   message_count: number;
   result_status: string | null;
@@ -113,9 +114,9 @@ export interface CellInfo {
 export async function cellCreate(
   workspaceId: string,
   nodeId: string,
-  agentType: string
+  cellType: string
 ): Promise<CellInfo> {
-  return invoke<CellInfo>('cell_create', { workspaceId, nodeId, agentType });
+  return invoke<CellInfo>('cell_create', { workspaceId, nodeId, cellType });
 }
 
 /** 列出某 WorkNode 下所有 cells */

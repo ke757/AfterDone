@@ -19,10 +19,8 @@ use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
-use crate::session::cell::{
-    manager::CellManager, SessionCell,
-    result::{StoredResult},
-};
+use crate::session::CellManager;
+use crate::session::cell::{SessionCell, result::StoredResult};
 use crate::workhub::{
     AgentType, GoalsRepo, AgentLogsRepo,
     Goal, GoalStatus, WorkSpaceRepo, WorkHub,

@@ -3,11 +3,9 @@ use tauri::State;
 use std::sync::Arc;
 
 use crate::session::Message;
-use crate::session::cell::{CellInfo, SessionCell};
-use crate::session::CellManager;
+use crate::session::cell::{CellInfo, CellType, SessionCell};
 use crate::state::AppState;
 use crate::error::AppResult;
-use crate::workhub::AgentType;
 
 // ============================================================================
 // Cell Commands
@@ -19,12 +17,11 @@ pub async fn cell_create(
     state: State<'_, AppState>,
     workspace_id: String,
     node_id: String,
-    agent_type: String,
+    cell_type: String,
 ) -> AppResult<CellInfo> {
-    let at: AgentType = agent_type.as_str().try_into()
+    let ct: CellType = cell_type.as_str().try_into()
         .map_err(|e: String| crate::error::AppError::Agent(e))?;
-
-    let cell: Arc<dyn SessionCell> = state.cell_manager.create_cell(&workspace_id, &node_id, at).await?;
+    let cell: Arc<dyn SessionCell> = state.cell_manager.create_cell(&workspace_id, &node_id, ct).await?;
     Ok(cell.to_info())
 }
 
