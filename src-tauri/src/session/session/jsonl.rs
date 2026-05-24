@@ -1,7 +1,7 @@
 //! JsonlSession — JSONL 持久化会话
 //!
 //! JSONL 文件格式：首行为 session 元数据，后续行为 Message 记录。
-//! 路径由 Cell 层指定：nodes/{node_id}/cells/{cell_id}/session.jsonl
+//! 路径：nodes/{node_id}/cells/{cell_id}.jsonl
 
 use std::path::{Path, PathBuf};
 use tokio::sync::{Mutex, RwLock};
@@ -112,14 +112,15 @@ impl JsonlSession {
         ))
     }
 
-    /// 扫描 cells 目录，发现所有 cell_id
+    /// 扫描 cells 目录，发现所有 cell_id（从 .jsonl 文件名中提取）
     pub fn discover_cells(cells_dir: &Path) -> AppResult<Vec<String>> {
         let mut ids = Vec::new();
         if cells_dir.exists() {
             for entry in std::fs::read_dir(cells_dir)? {
                 let entry = entry?;
-                if entry.file_type()?.is_dir() {
-                    ids.push(entry.file_name().to_string_lossy().to_string());
+                let file_name = entry.file_name().to_string_lossy().to_string();
+                if entry.file_type()?.is_file() && file_name.ends_with(".jsonl") {
+                    ids.push(file_name.trim_end_matches(".jsonl").to_string());
                 }
             }
         }

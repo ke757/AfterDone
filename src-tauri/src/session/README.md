@@ -47,3 +47,8 @@ src-tauri/src/session/
 ```
 
 CellManager 提到 session/ 根目录是因为它管理的是 Cell，不是 Session，放 cell/ 下形成 cell::manager 也可以，但概念上它和 cell 目录平级更干净。
+
+文件目录：
+```
+nodes/{node_id}/cells/{cell_id}.jsonl
+```

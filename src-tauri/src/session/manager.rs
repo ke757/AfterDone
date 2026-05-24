@@ -174,15 +174,15 @@ impl CellManager {
 
             for cell_entry in std::fs::read_dir(&cells_subdir)? {
                 let cell_entry = cell_entry?;
-                if !cell_entry.file_type()?.is_dir() {
+                if !cell_entry.file_type()?.is_file() {
                     continue;
                 }
-                let cell_id = cell_entry.file_name().to_string_lossy().to_string();
-                let jsonl_path = cell_entry.path().join("session.jsonl");
-
-                if !jsonl_path.exists() {
+                let file_name = cell_entry.file_name().to_string_lossy().to_string();
+                if !file_name.ends_with(".jsonl") {
                     continue;
                 }
+                let cell_id = file_name.trim_end_matches(".jsonl").to_string();
+                let jsonl_path = cell_entry.path();
 
                 match JsonlSession::load(&jsonl_path) {
                     Ok((session, meta)) => {
@@ -246,7 +246,6 @@ impl CellManager {
         self.cells_dir
             .join(node_id)
             .join("cells")
-            .join(cell_id)
-            .join("session.jsonl")
+            .join(format!("{}.jsonl", cell_id))
     }
 }
