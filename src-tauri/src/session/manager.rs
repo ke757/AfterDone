@@ -48,7 +48,7 @@ impl CellManager {
 
         let cell: Arc<dyn SessionCell> = match cell_type {
             CellType::GoalSummary => {
-                let session = Arc::new(InMemorySession::new());
+                let session = Box::new(InMemorySession::new());
                 Arc::new(GoalSummaryCell::new(
                     cell_id,
                     workspace_id.to_string(),
@@ -65,7 +65,7 @@ impl CellManager {
                     cell_type: CellType::Build,
                     agent_type: crate::workhub::AgentType::Builder,
                 };
-                let session = Arc::new(JsonlSession::create(&jsonl_path, &meta)?);
+                let session = Box::new(JsonlSession::create(&jsonl_path, &meta)?);
                 Arc::new(BuildCell::new(
                     cell_id,
                     workspace_id.to_string(),
@@ -82,7 +82,7 @@ impl CellManager {
                     cell_type: CellType::Executor,
                     agent_type: crate::workhub::AgentType::Executor,
                 };
-                let session = Arc::new(JsonlSession::create(&jsonl_path, &meta)?);
+                let session = Box::new(JsonlSession::create(&jsonl_path, &meta)?);
                 Arc::new(ExecutorCell::new(
                     cell_id,
                     workspace_id.to_string(),
@@ -99,7 +99,7 @@ impl CellManager {
                     cell_type: CellType::Optimizer,
                     agent_type: crate::workhub::AgentType::Optimizer,
                 };
-                let session = Arc::new(JsonlSession::create(&jsonl_path, &meta)?);
+                let session = Box::new(JsonlSession::create(&jsonl_path, &meta)?);
                 Arc::new(OptimizerCell::new(
                     cell_id,
                     workspace_id.to_string(),
@@ -186,7 +186,7 @@ impl CellManager {
 
                 match JsonlSession::load(&jsonl_path) {
                     Ok((session, meta)) => {
-                        let session: Arc<dyn super::session::Session> = Arc::new(session);
+                        let session: Box<dyn super::session::Session> = Box::new(session);
                         let cell: Arc<dyn SessionCell> = match meta.cell_type {
                             CellType::Build => Arc::new(BuildCell::new(
                                 meta.cell_id,

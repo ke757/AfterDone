@@ -106,9 +106,14 @@ export interface CellInfo {
   cell_type: string;
   agent_type: string | null;
   status: string;
-  message_count: number;
-  result_status: string | null;
+  line_count: number;
+  has_result: boolean;
+  last_result_at: string | null;
 }
+
+export type SessionLine =
+  | { type: 'message'; role: string; content: string; agent_type: string; created_at: string }
+  | { type: 'effect'; effect_type: 'result' | 'file_change'; agent_type: string; content: unknown; created_at: string };
 
 /** 创建新的 Cell */
 export async function cellCreate(
@@ -124,11 +129,16 @@ export async function cellListByNode(nodeId: string): Promise<CellInfo[]> {
   return invoke<CellInfo[]>('cell_list_by_node', { nodeId });
 }
 
-/** 获取 Cell 的完整会话历史 */
+/** 获取 Cell 的完整会话行列表 */
 export async function cellGetHistory(
   cellId: string
-): Promise<{ cell_id: string; messages: Array<{ role: string; content: string; agent_type: string; created_at: string }> }> {
+): Promise<{ cell_id: string; messages: SessionLine[] }> {
   return invoke('cell_get_history', { cellId });
+}
+
+/** Redo：从指定行号截断 session */
+export async function cellRedo(cellId: string, atIndex: number): Promise<void> {
+  return invoke('cell_redo', { cellId, atIndex });
 }
 
 // ============================================================================

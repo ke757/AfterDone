@@ -52,3 +52,33 @@ CellManager 提到 session/ 根目录是因为它管理的是 Cell，不是 Sess
 ```
 nodes/{node_id}/cells/{cell_id}.jsonl
 ```
+
+Shape：
+```
+1. CellMeta — JSONL 首行（非 SessionLine 变体，但出现在文件中）
+
+{"type": "cell_meta", "cell_id": "abc123", "workspace_id": "ws_1",
+ "node_id": "n1", "cell_type": "build", "agent_type": "builder",
+ "created_at": "2026-05-24T00:00:00Z"}
+
+2. Message — 对话消息
+
+{"type": "message", "role": "user", "content": "Build a web app",
+ "agent_type": "summarizer", "created_at": "2026-05-24T00:00:00Z"}
+
+3. Effect::Result — Agent 阶段产出结果
+
+{"type": "effect", "effect_type": "result",
+ "agent_type": "builder",
+ "content": {"success": true, "milestone_id": "m1", ...},
+ "created_at": "2026-05-24T00:00:00Z"}
+
+4. Effect::FileChange — Tool 文件变更摘要
+
+{"type": "effect", "effect_type": "file_change",
+ "agent_type": "builder",
+ "content": {"tool": "write_file", "files": ["src/main.rs"], "summary": "+fn foo()"},
+ "created_at": "2026-05-24T00:00:00Z"}
+
+content（必须含 tool/files/summary）
+```

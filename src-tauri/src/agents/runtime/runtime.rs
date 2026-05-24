@@ -8,7 +8,6 @@ use crate::agents::{
     GoalSummarizerAgent, BuilderAgent, ExecutorAgent, OptimizerAgent,
 };
 use crate::agents::runtime::handlers::{
-    HandlerContext,
     summarizer::SummarizerResultHandler,
     builder::BuilderResultHandler,
     executor::ExecutorResultHandler,
@@ -20,7 +19,8 @@ use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
 use crate::llm::LlmProvider;
 use crate::session::CellManager;
-use crate::session::cell::{SessionCell, result::StoredResult};
+use crate::session::cell::SessionCell;
+use crate::session::EffectType;
 use crate::workhub::{
     AgentType, GoalsRepo, AgentLogsRepo,
     Goal, GoalStatus, WorkSpaceRepo, WorkHub,
@@ -31,7 +31,7 @@ use crate::workhub::{
 /// 职责：
 /// - 上下文读取：从 DB + Cell 构建 RuntimeContext
 /// - Agent 单次 turn 运行：创建 Agent 实例 → 调用 run()
-/// - 结果收集：通过 ResultHandler 转换 → 存入 Cell
+/// - 结果收集：通过 ResultHandler 写 effect 行 → persist 到 DB
 pub struct AgentRuntime {
     db: DatabasePool,
     transport: Arc<dyn Transport>,
@@ -70,13 +70,11 @@ impl AgentRuntime {
     // ======================================================================
 
     /// 执行一轮对话 turn（用于 deliver_message 模式）
-    ///
-    /// cell_id → 获取 Cell → 追加 user 消息 → agent.run() → handler.handle() → cell.set_result()
     pub async fn run_turn(
         &self,
         cell_id: &str,
         message: &str,
-    ) -> AppResult<StoredResult> {
+    ) -> AppResult<()> {
         let cell = self.cell_manager.get_cell(cell_id).await.ok_or_else(|| {
             AppError::NotFound(format!("Cell not found: {}", cell_id))
         })?;
@@ -100,14 +98,12 @@ impl AgentRuntime {
             self.emitter.clone(),
         ).await?;
 
-        let stored = self.handle_and_store(output, agent_type, &cell, &goal.id).await?;
-        Ok(stored)
+        self.handle_output(&output, &agent_type, &cell, &goal.id).await?;
+        Ok(())
     }
 
     /// 执行一次完整 Agent 任务（用于 start_agent 的 spawned task）
-    ///
-    /// 完整流程：context → agent.run() → handler.handle() → cell.set_result() → handler.persist()
-    pub async fn run_task(&self, cell_id: &str) -> AppResult<StoredResult> {
+    pub async fn run_task(&self, cell_id: &str) -> AppResult<()> {
         let cell = self.cell_manager.get_cell(cell_id).await.ok_or_else(|| {
             AppError::NotFound(format!("Cell not found: {}", cell_id))
         })?;
@@ -128,15 +124,16 @@ impl AgentRuntime {
             self.emitter.clone(),
         ).await?;
 
-        let stored = self.handle_and_store(output, agent_type.clone(), &cell, &goal.id).await?;
+        // 写 effect + persist
+        self.handle_output(&output, &agent_type, &cell, &goal.id).await?;
 
-        // 持久化到 DB
+        // DB 持久化
         let handler = self.handlers.get(&agent_type).ok_or_else(|| {
             AppError::Agent(format!("No handler registered for agent type: {:?}", agent_type))
         })?;
-        handler.persist(&self.db, &stored).await?;
+        handler.persist(&self.db, &output, &goal.id, cell.workspace_id()).await?;
 
-        Ok(stored)
+        Ok(())
     }
 
     /// CellManager 访问
@@ -168,27 +165,22 @@ impl AgentRuntime {
         }
     }
 
-    /// Handler 处理 + 存储到 Cell
-    async fn handle_and_store(
+    /// 写 Effect::Result 到 Cell
+    async fn handle_output(
         &self,
-        output: AgentOutput,
-        agent_type: AgentType,
+        output: &AgentOutput,
+        agent_type: &AgentType,
         cell: &Arc<dyn SessionCell>,
-        goal_id: &str,
-    ) -> AppResult<StoredResult> {
-        let handler = self.handlers.get(&agent_type).ok_or_else(|| {
+        _goal_id: &str,
+    ) -> AppResult<()> {
+        let handler = self.handlers.get(agent_type).ok_or_else(|| {
             AppError::Agent(format!("No handler registered for agent type: {:?}", agent_type))
         })?;
 
-        let stored = handler.handle(output, &HandlerContext {
-            session_id: cell.cell_id().to_string(),
-            workspace_id: cell.workspace_id().to_string(),
-            goal_id: goal_id.to_string(),
-        }).await?;
+        let content = handler.to_effect_content(output)?;
+        cell.add_effect(EffectType::Result, content).await;
 
-        cell.set_result(stored.clone()).await;
-
-        Ok(stored)
+        Ok(())
     }
 
     /// 构建 RuntimeContext

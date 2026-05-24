@@ -88,6 +88,7 @@ pub fn run() {
             commands::sessions::cell_create,
             commands::sessions::cell_list_by_node,
             commands::sessions::cell_get_history,
+            commands::sessions::cell_redo,
             commands::summarizer::summarizer_send_message,
             commands::summarizer::summarizer_confirm,
             commands::summarizer::summarizer_status,

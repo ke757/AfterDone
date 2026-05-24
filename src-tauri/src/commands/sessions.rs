@@ -2,7 +2,7 @@ use serde::Serialize;
 use tauri::State;
 use std::sync::Arc;
 
-use crate::session::Message;
+use crate::session::SessionLine;
 use crate::session::cell::{CellInfo, CellType, SessionCell};
 use crate::state::AppState;
 use crate::error::AppResult;
@@ -34,7 +34,7 @@ pub async fn cell_list_by_node(
     Ok(state.cell_manager.list_cells_by_node(&node_id).await)
 }
 
-/// 获取 Cell 的完整会话历史
+/// 获取 Cell 的完整会话行列表
 #[tauri::command]
 pub async fn cell_get_history(
     state: State<'_, AppState>,
@@ -46,8 +46,22 @@ pub async fn cell_get_history(
 
     Ok(CellHistoryResponse {
         cell_id,
-        messages: cell.get_history(),
+        messages: cell.get_lines(),
     })
+}
+
+/// Redo：从指定行号截断 session，丢弃 >=at_index 的行
+#[tauri::command]
+pub async fn cell_redo(
+    state: State<'_, AppState>,
+    cell_id: String,
+    at_index: usize,
+) -> AppResult<()> {
+    let cell = state.cell_manager.get_cell(&cell_id).await
+        .ok_or_else(|| crate::error::AppError::NotFound(format!("Cell not found: {}", cell_id)))?;
+    let cell: Arc<dyn SessionCell> = cell;
+    cell.truncate(at_index).await;
+    Ok(())
 }
 
 // ============================================================================
@@ -57,5 +71,5 @@ pub async fn cell_get_history(
 #[derive(Debug, Clone, Serialize)]
 pub struct CellHistoryResponse {
     pub cell_id: String,
-    pub messages: Vec<Message>,
+    pub messages: Vec<SessionLine>,
 }

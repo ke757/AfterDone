@@ -3,13 +3,11 @@
 //! 绑定 Builder Agent，使用 JsonlSession。
 //! 用户确认 Goal 后 Builder 执行规划、派发、验证、结论流水线。
 
-use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
 use super::{CellStatus, CellType, SessionCell};
-use super::result::StoredResult;
-use crate::session::Message;
+use crate::session::{EffectType, SessionLine};
 use crate::session::session::Session;
 use crate::workhub::AgentType;
 
@@ -17,9 +15,8 @@ pub struct BuildCell {
     cell_id: String,
     workspace_id: String,
     node_id: String,
-    session: Arc<dyn Session>,
+    session: Box<dyn Session>,
     status: RwLock<CellStatus>,
-    result: RwLock<Option<StoredResult>>,
 }
 
 impl BuildCell {
@@ -27,7 +24,7 @@ impl BuildCell {
         cell_id: String,
         workspace_id: String,
         node_id: String,
-        session: Arc<dyn Session>,
+        session: Box<dyn Session>,
     ) -> Self {
         Self {
             cell_id,
@@ -35,7 +32,6 @@ impl BuildCell {
             node_id,
             session,
             status: RwLock::new(CellStatus::Active),
-            result: RwLock::new(None),
         }
     }
 }
@@ -50,19 +46,31 @@ impl SessionCell for BuildCell {
     fn status(&self) -> CellStatus { self.status.blocking_read().clone() }
 
     async fn add_message(&self, role: &str, content: &str) {
-        let msg = Message {
+        let line = SessionLine::Message {
             role: role.to_string(),
             content: content.to_string(),
             agent_type: AgentType::Builder.to_string(),
             created_at: chrono::Utc::now().to_rfc3339(),
         };
-        self.session.add_message(msg).await;
+        self.session.add_line(line).await;
     }
 
-    fn get_history(&self) -> Vec<Message> { self.session.get_history() }
-    fn message_count(&self) -> usize { self.session.message_count() }
+    async fn add_effect(&self, effect_type: EffectType, content: serde_json::Value) {
+        let line = SessionLine::Effect {
+            effect_type,
+            agent_type: AgentType::Builder.to_string(),
+            content,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        };
+        self.session.add_line(line).await;
+    }
+
+    fn get_lines(&self) -> Vec<SessionLine> { self.session.get_lines() }
+    fn line_count(&self) -> usize { self.session.line_count() }
     async fn clear(&self) { self.session.clear().await; }
+    async fn truncate(&self, at_index: usize) { self.session.truncate(at_index).await; }
     async fn close(&self) { *self.status.write().await = CellStatus::Closed; }
-    async fn set_result(&self, result: StoredResult) { *self.result.write().await = Some(result); }
-    fn get_result(&self) -> Option<StoredResult> { self.result.blocking_read().clone() }
+    fn latest_effect(&self, effect_type: EffectType) -> Option<SessionLine> {
+        self.session.latest_effect(effect_type)
+    }
 }

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use futures::Stream;
 
-use crate::session::Message;
+use crate::session::SessionLine;
 use crate::error::AppResult;
 
 /// A streaming chunk from the LLM
@@ -22,7 +22,7 @@ pub trait LlmProvider: Send + Sync {
         &self,
         system_prompt: &str,
         user_prompt: &str,
-        context: &[Message],
+        context: &[SessionLine],
     ) -> AppResult<String>;
 
     /// Streaming completion
@@ -30,7 +30,7 @@ pub trait LlmProvider: Send + Sync {
         &self,
         system_prompt: &str,
         user_prompt: &str,
-        context: &[Message],
+        context: &[SessionLine],
     ) -> AppResult<LLMStream>;
 
     /// Get the model name being used

@@ -1,13 +1,10 @@
 use async_trait::async_trait;
 
-use super::{HandlerContext, ResultHandler};
+use super::ResultHandler;
 use crate::agents::AgentOutput;
 use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
-use crate::session::cell::result::{ResultStatus, StoredResult};
-use crate::workhub::{
-    AgentType, GoalsRepo, GoalStatus,
-};
+use crate::workhub::{AgentType, GoalsRepo, GoalStatus};
 
 pub struct ExecutorResultHandler;
 
@@ -17,35 +14,22 @@ impl ResultHandler for ExecutorResultHandler {
         AgentType::Executor
     }
 
-    async fn handle(&self, output: AgentOutput, ctx: &HandlerContext) -> AppResult<StoredResult> {
-        let status = match &output {
-            AgentOutput::ExecutionResult { success, .. } => {
-                if *success {
-                    ResultStatus::Ready
-                } else {
-                    ResultStatus::Failed
-                }
-            }
-            _ => {
-                return Err(AppError::Agent(
-                    "Executor handler received unexpected output variant".into(),
-                ))
-            }
-        };
-
-        Ok(StoredResult::new(
-            ctx.session_id.clone(),
-            ctx.workspace_id.clone(),
-            ctx.goal_id.clone(),
-            AgentType::Executor,
-            serde_json::to_value(&output)?,
-            status,
-        ))
+    fn to_effect_content(&self, output: &AgentOutput) -> AppResult<serde_json::Value> {
+        match output {
+            AgentOutput::ExecutionResult { .. } => Ok(serde_json::to_value(output)?),
+            _ => Err(AppError::Agent(
+                "Executor handler received unexpected output variant".into(),
+            )),
+        }
     }
 
-    async fn persist(&self, db: &DatabasePool, stored: &StoredResult) -> AppResult<()> {
-        let output: AgentOutput = serde_json::from_value(stored.output.clone())?;
-
+    async fn persist(
+        &self,
+        db: &DatabasePool,
+        output: &AgentOutput,
+        goal_id: &str,
+        _workspace_id: &str,
+    ) -> AppResult<()> {
         match output {
             AgentOutput::ExecutionResult {
                 milestone_id: _,
@@ -53,10 +37,10 @@ impl ResultHandler for ExecutorResultHandler {
                 bugs_found,
                 ..
             } => {
-                if success {
-                    GoalsRepo::update_status(db, &stored.goal_id, GoalStatus::Reached).await?;
+                if *success {
+                    GoalsRepo::update_status(db, goal_id, GoalStatus::Reached).await?;
                 } else {
-                    GoalsRepo::update_status(db, &stored.goal_id, GoalStatus::Failed).await?;
+                    GoalsRepo::update_status(db, goal_id, GoalStatus::Failed).await?;
                     if !bugs_found.is_empty() {
                         tracing::info!("Execution found {} bugs", bugs_found.len());
                     }

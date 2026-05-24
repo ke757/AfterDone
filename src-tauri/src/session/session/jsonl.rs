@@ -1,6 +1,6 @@
 //! JsonlSession — JSONL 持久化会话
 //!
-//! JSONL 文件格式：首行为 session 元数据，后续行为 Message 记录。
+//! JSONL 文件格式：首行为 session 元数据（CellMeta），后续行为 SessionLine 记录。
 //! 路径：nodes/{node_id}/cells/{cell_id}.jsonl
 
 use std::path::{Path, PathBuf};
@@ -8,7 +8,7 @@ use tokio::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 
 use super::Session;
-use crate::session::Message;
+use crate::session::SessionLine;
 use crate::session::cell::CellType;
 use crate::error::AppResult;
 use crate::workhub::AgentType;
@@ -36,7 +36,7 @@ pub struct JsonlSessionMeta {
 }
 
 pub struct JsonlSession {
-    messages: RwLock<Vec<Message>>,
+    lines: RwLock<Vec<SessionLine>>,
     jsonl_path: PathBuf,
     file_lock: Mutex<()>,
 }
@@ -61,7 +61,7 @@ impl JsonlSession {
         std::fs::write(jsonl_path, header_line)?;
 
         Ok(Self {
-            messages: RwLock::new(Vec::new()),
+            lines: RwLock::new(Vec::new()),
             jsonl_path: jsonl_path.to_path_buf(),
             file_lock: Mutex::new(()),
         })
@@ -70,7 +70,7 @@ impl JsonlSession {
     /// 从已有 JSONL 文件加载，返回 Session 实例 + 元信息
     pub fn load(jsonl_path: &Path) -> AppResult<(Self, JsonlSessionMeta)> {
         let content = std::fs::read_to_string(jsonl_path)?;
-        let mut messages = Vec::new();
+        let mut lines = Vec::new();
         let mut meta = None;
 
         for line in content.lines() {
@@ -79,8 +79,9 @@ impl JsonlSession {
                 continue;
             }
             if meta.is_none() {
-                if let Ok(header) = serde_json::from_str::<SessionHeader>(trimmed) {
-                    if header.record_type == "cell_meta" && meta.is_none() {
+                let header_result = serde_json::from_str::<SessionHeader>(trimmed);
+                if let Ok(header) = header_result {
+                    if header.record_type == "cell_meta" {
                         meta = Some(JsonlSessionMeta {
                             cell_id: header.cell_id,
                             workspace_id: header.workspace_id,
@@ -93,8 +94,8 @@ impl JsonlSession {
                     }
                 }
             }
-            if let Ok(msg) = serde_json::from_str::<Message>(trimmed) {
-                messages.push(msg);
+            if let Ok(sl) = serde_json::from_str::<SessionLine>(trimmed) {
+                lines.push(sl);
             }
         }
 
@@ -104,7 +105,7 @@ impl JsonlSession {
 
         Ok((
             Self {
-                messages: RwLock::new(messages),
+                lines: RwLock::new(lines),
                 jsonl_path: jsonl_path.to_path_buf(),
                 file_lock: Mutex::new(()),
             },
@@ -126,14 +127,33 @@ impl JsonlSession {
         }
         Ok(ids)
     }
+
+    /// 重写整个 JSONL 文件（保留首行 header，写入 lines）
+    fn rewrite_file(&self) -> AppResult<()> {
+        let _guard = self.file_lock.blocking_lock();
+        let content = std::fs::read_to_string(&self.jsonl_path)?;
+        let header_end = content.find('\n').map(|i| i + 1).unwrap_or(0);
+        let header = &content[..header_end];
+
+        let lines = self.lines.blocking_read();
+        let mut output = String::from(header);
+        for line in lines.iter() {
+            if let Ok(json) = serde_json::to_string(line) {
+                output.push_str(&json);
+                output.push('\n');
+            }
+        }
+        std::fs::write(&self.jsonl_path, output)?;
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl Session for JsonlSession {
-    async fn add_message(&self, msg: Message) {
-        self.messages.write().await.push(msg.clone());
+    async fn add_line(&self, line: SessionLine) {
+        self.lines.write().await.push(line.clone());
 
-        let line = serde_json::to_string(&msg).unwrap_or_default();
+        let json = serde_json::to_string(&line).unwrap_or_default();
         let _guard = self.file_lock.lock().await;
         use std::io::Write;
         if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -141,20 +161,32 @@ impl Session for JsonlSession {
             .append(true)
             .open(&self.jsonl_path)
         {
-            let _ = writeln!(file, "{}", line);
+            let _ = writeln!(file, "{}", json);
         }
     }
 
-    fn get_history(&self) -> Vec<Message> {
-        self.messages.blocking_read().clone()
+    fn get_lines(&self) -> Vec<SessionLine> {
+        self.lines.blocking_read().clone()
     }
 
-    fn message_count(&self) -> usize {
-        self.messages.blocking_read().len()
+    fn line_count(&self) -> usize {
+        self.lines.blocking_read().len()
+    }
+
+    async fn truncate(&self, at_index: usize) {
+        {
+            let mut lines = self.lines.write().await;
+            if at_index < lines.len() {
+                lines.truncate(at_index);
+            } else {
+                return;
+            }
+        }
+        let _ = self.rewrite_file();
     }
 
     async fn clear(&self) {
-        self.messages.write().await.clear();
+        self.lines.write().await.clear();
         let _guard = self.file_lock.lock().await;
         if let Ok(content) = std::fs::read_to_string(&self.jsonl_path) {
             if let Some(first_line_end) = content.find('\n') {

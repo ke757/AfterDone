@@ -1,10 +1,6 @@
-export interface Message {
-  role: string;
-  content: string;
-  agent_type: string;
-  created_at: string;
-}
+import type { SessionLine } from '../services/commands';
 
+export type { SessionLine as Message };
 export type MessageRole =
   | 'user'
   | 'assistant'

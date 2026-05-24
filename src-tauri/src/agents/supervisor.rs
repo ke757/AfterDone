@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 use crate::agents::runtime::AgentRuntime;
 use crate::agents::types::{AgentStatus, AgentTaskHandle};
 use crate::error::{AppError, AppResult};
-use crate::session::cell::result::{ResultStatus, StoredResult};
+use crate::session::EffectType;
 use crate::workhub::{AgentType, GoalsRepo, GoalStatus, WorkSpaceRepo};
 
 /// AgentSupervisor — 任务分发 + 生命周期管理
@@ -42,7 +42,7 @@ impl AgentSupervisor {
         &self,
         cell_id: &str,
         message: &str,
-    ) -> AppResult<StoredResult> {
+    ) -> AppResult<()> {
         let cell = self.runtime.cell_manager().get_cell(cell_id).await.ok_or_else(|| {
             AppError::NotFound(format!("Cell not found: {}", cell_id))
         })?;
@@ -57,24 +57,30 @@ impl AgentSupervisor {
             }
             _ => {
                 self.start_agent(cell_id).await?;
-                let msg = format!("{} agent started", agent_type);
-                Ok(StoredResult::new(
-                    cell_id.to_string(),
-                    workspace.id,
-                    goal.id,
-                    agent_type,
-                    serde_json::json!({ "message": msg }),
-                    ResultStatus::Active,
-                ))
+                // 记录一个简单的 started effect
+                cell.add_effect(
+                    EffectType::Result,
+                    serde_json::json!({ "message": format!("{} agent started", agent_type) }),
+                ).await;
+                Ok(())
             }
         }
     }
 
     /// 查询 Cell 的当前结果状态
-    pub async fn get_cell_result_status(&self, cell_id: &str) -> Option<ResultStatus> {
+    pub async fn get_cell_result_status(&self, cell_id: &str) -> Option<String> {
         self.runtime.cell_manager()
             .get_cell(cell_id).await
-            .and_then(|c| c.get_result().map(|r| r.status))
+            .and_then(|c| {
+                c.latest_effect(EffectType::Result)
+                    .and_then(|l| {
+                        if let crate::session::SessionLine::Effect { content, .. } = l {
+                            content.get("type").and_then(|v| v.as_str()).map(String::from)
+                        } else {
+                            None
+                        }
+                    })
+            })
     }
 
     // ======================================================================
@@ -137,11 +143,10 @@ impl AgentSupervisor {
                 }
             }
 
-            // 通过 AgentRuntime 执行（内部已完成 handler.handle() + handler.persist()）
             let result = runtime.run_task(&cell_id_owned).await;
 
             match result {
-                Ok(_stored) => {
+                Ok(()) => {
                     let mut tasks_guard = tasks.write().await;
                     if let Some(h) = tasks_guard.get_mut(&workspace_id_owned) {
                         h.status = AgentStatus::Completed;

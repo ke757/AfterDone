@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use crate::workhub::Goal;
 use crate::error::AppResult;
-use crate::session::cell::result::{ResultStatus, StoredResult};
+use crate::session::{EffectType, SessionLine};
 use crate::session::cell::SessionCell;
 use crate::state::AppState;
 use crate::services::SummarizerService;
@@ -21,14 +21,36 @@ pub async fn summarizer_send_message(
     cell_id: String,
     message: String,
 ) -> AppResult<SummarizerTurnResponse> {
-    let stored = state.supervisor.deliver_message(&cell_id, &message).await?;
+    state.supervisor.deliver_message(&cell_id, &message).await?;
 
-    let summary_ready = stored.status == ResultStatus::Ready;
-    let message = extract_message_text(&stored);
+    let cell = state.cell_manager.get_cell(&cell_id).await
+        .ok_or_else(|| crate::error::AppError::NotFound(format!("Cell not found: {}", cell_id)))?;
+    let cell: Arc<dyn SessionCell> = cell;
+
+    let response_message = cell
+        .latest_effect(EffectType::Result)
+        .and_then(|l| match l {
+            SessionLine::Effect { content, .. } => {
+                content.get("message").and_then(|v| v.as_str()).map(String::from)
+            }
+            _ => None,
+        })
+        .unwrap_or_default();
+
+    // Check if summary is ready via latest effect content
+    let summary_ready = cell
+        .latest_effect(EffectType::Result)
+        .and_then(|l| match l {
+            SessionLine::Effect { content, .. } => {
+                content.get("summary_draft").map(|v| !v.is_null())
+            }
+            _ => None,
+        })
+        .unwrap_or(false);
 
     Ok(SummarizerTurnResponse {
         cell_id,
-        message,
+        message: response_message,
         summary_ready,
     })
 }
@@ -44,12 +66,12 @@ pub async fn summarizer_confirm(
     let cell: Arc<dyn SessionCell> = cell;
 
     let workspace_id = cell.workspace_id().to_string();
-    let messages = cell.get_history();
+    let lines = cell.get_lines();
 
     let goal = SummarizerService::confirm(
         &state.db,
         &workspace_id,
-        &messages,
+        &lines,
         &state.emitter,
     ).await?;
 
@@ -64,20 +86,14 @@ pub async fn summarizer_status(
     state: State<'_, AppState>,
     cell_id: String,
 ) -> AppResult<CellStatusResponse> {
-    let status = state.supervisor.get_cell_result_status(&cell_id).await;
+    let cell = state.cell_manager.get_cell(&cell_id).await
+        .ok_or_else(|| crate::error::AppError::NotFound(format!("Cell not found: {}", cell_id)))?;
+    let status = cell.latest_effect(EffectType::Result).map(|l| l.created_at_str().to_string());
 
     Ok(CellStatusResponse {
         cell_id,
-        result_status: status.map(|s| format!("{:?}", s)),
+        result_status: status,
     })
-}
-
-fn extract_message_text(stored: &StoredResult) -> String {
-    stored.output
-        .get("message")
-        .and_then(|v| v.as_str())
-        .map(String::from)
-        .unwrap_or_else(|| format!("{:?}", stored.output))
 }
 
 #[derive(Debug, Clone, Serialize)]

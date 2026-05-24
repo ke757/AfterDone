@@ -63,7 +63,7 @@ impl OptimizerAgent {
         let response = llm.complete(
             "You are an optimization agent that analyzes achieved goals.",
             &prompt,
-            &ctx.cell.get_history(),
+            &ctx.cell.get_lines(),
         ).await?;
 
         // Parse todo list
@@ -102,7 +102,7 @@ impl OptimizerAgent {
         let _spec_response = llm.complete(
             "You are an optimization agent that applies improvements.",
             &spec_prompt,
-            &ctx.cell.get_history(),
+            &ctx.cell.get_lines(),
         ).await?;
 
         emitter.emit_agent_stream(
@@ -165,7 +165,7 @@ impl OptimizerAgent {
         let _response = llm.complete(
             "You are a verification agent.",
             &verify_prompt,
-            &ctx.cell.get_history(),
+            &ctx.cell.get_lines(),
         ).await?;
 
         Ok(VerificationResult {

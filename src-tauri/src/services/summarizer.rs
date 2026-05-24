@@ -1,7 +1,7 @@
 use crate::db::DatabasePool;
 use crate::error::AppResult;
 use crate::events::EventBridge;
-use crate::session::Message;
+use crate::session::SessionLine;
 use crate::workhub::{Goal, GoalStatus, GoalSummary, GoalsRepo, WorkSpaceRepo};
 
 /// Summarizer 持久化服务
@@ -11,13 +11,15 @@ use crate::workhub::{Goal, GoalStatus, GoalSummary, GoalsRepo, WorkSpaceRepo};
 pub struct SummarizerService;
 
 impl SummarizerService {
-    /// 从消息列表中提取最后一条 assistant 消息中的 GoalSummary
-    pub fn extract_summary_from_messages(messages: &[Message]) -> AppResult<GoalSummary> {
-        let last_assistant = messages
+    /// 从 session lines 中提取最后一条 assistant Message 中的 GoalSummary
+    pub fn extract_summary_from_messages(lines: &[SessionLine]) -> AppResult<GoalSummary> {
+        let last_assistant = lines
             .iter()
             .rev()
-            .find(|m| m.role == "assistant")
-            .map(|m| m.content.clone())
+            .find_map(|l| match l {
+                SessionLine::Message { role, content, .. } if role == "assistant" => Some(content.clone()),
+                _ => None,
+            })
             .unwrap_or_default();
 
         if last_assistant.is_empty() {
@@ -60,17 +62,17 @@ impl SummarizerService {
 
     /// 确认并持久化 Summary
     ///
-    /// 从 cell 的会话历史中提取 GoalSummary → 写入 DB → 更新状态
+    /// 从 cell 的 session lines 中提取 GoalSummary → 写入 DB → 更新状态
     pub async fn confirm(
         pool: &DatabasePool,
         workspace_id: &str,
-        messages: &[Message],
+        lines: &[SessionLine],
         emitter: &EventBridge,
     ) -> AppResult<Goal> {
         let workspace = WorkSpaceRepo::get_by_id(pool, workspace_id).await?;
         let goal = GoalsRepo::get_by_id(pool, &workspace.goal_id).await?;
 
-        let summary = Self::extract_summary_from_messages(messages)?;
+        let summary = Self::extract_summary_from_messages(lines)?;
         let goal = Self::persist_summary(pool, &goal.id, &summary).await?;
 
         GoalsRepo::update_status(pool, &goal.id, GoalStatus::Draft).await?;

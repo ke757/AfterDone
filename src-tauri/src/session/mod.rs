@@ -13,9 +13,11 @@ pub mod session;
 pub mod cell;
 pub mod manager;
 
-pub use types::Message;
+pub use types::{EffectType, SessionLine};
 pub use cell::{
-    CellInfo, CellStatus, CellType, SessionCell,
-    result::{ResultStatus, StoredResult},
+    CellInfo, 
+    CellStatus, 
+    CellType, 
+    SessionCell,
 };
 pub use manager::CellManager;

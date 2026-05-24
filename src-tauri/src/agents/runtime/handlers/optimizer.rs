@@ -1,13 +1,10 @@
 use async_trait::async_trait;
 
-use super::{HandlerContext, ResultHandler};
+use super::ResultHandler;
 use crate::agents::AgentOutput;
 use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
-use crate::session::cell::result::{ResultStatus, StoredResult};
-use crate::workhub::{
-    AgentType, GoalsRepo, GoalStatus, AgentLogsRepo,
-};
+use crate::workhub::{AgentType, GoalsRepo, GoalStatus, AgentLogsRepo};
 
 pub struct OptimizerResultHandler;
 
@@ -17,35 +14,22 @@ impl ResultHandler for OptimizerResultHandler {
         AgentType::Optimizer
     }
 
-    async fn handle(&self, output: AgentOutput, ctx: &HandlerContext) -> AppResult<StoredResult> {
-        let status = match &output {
-            AgentOutput::OptimizationResult { solidified, .. } => {
-                if *solidified {
-                    ResultStatus::Confirmed
-                } else {
-                    ResultStatus::Ready
-                }
-            }
-            _ => {
-                return Err(AppError::Agent(
-                    "Optimizer handler received unexpected output variant".into(),
-                ))
-            }
-        };
-
-        Ok(StoredResult::new(
-            ctx.session_id.clone(),
-            ctx.workspace_id.clone(),
-            ctx.goal_id.clone(),
-            AgentType::Optimizer,
-            serde_json::to_value(&output)?,
-            status,
-        ))
+    fn to_effect_content(&self, output: &AgentOutput) -> AppResult<serde_json::Value> {
+        match output {
+            AgentOutput::OptimizationResult { .. } => Ok(serde_json::to_value(output)?),
+            _ => Err(AppError::Agent(
+                "Optimizer handler received unexpected output variant".into(),
+            )),
+        }
     }
 
-    async fn persist(&self, db: &DatabasePool, stored: &StoredResult) -> AppResult<()> {
-        let output: AgentOutput = serde_json::from_value(stored.output.clone())?;
-
+    async fn persist(
+        &self,
+        db: &DatabasePool,
+        output: &AgentOutput,
+        goal_id: &str,
+        _workspace_id: &str,
+    ) -> AppResult<()> {
         match output {
             AgentOutput::OptimizationResult {
                 milestone_id: _,
@@ -53,14 +37,14 @@ impl ResultHandler for OptimizerResultHandler {
                 optimizations,
                 new_node_id,
             } => {
-                if solidified {
-                    GoalsRepo::update_status(db, &stored.goal_id, GoalStatus::Archived).await?;
+                if *solidified {
+                    GoalsRepo::update_status(db, goal_id, GoalStatus::Archived).await?;
                 } else {
-                    GoalsRepo::update_status(db, &stored.goal_id, GoalStatus::Reached).await?;
+                    GoalsRepo::update_status(db, goal_id, GoalStatus::Reached).await?;
                 }
                 AgentLogsRepo::append(
                     db,
-                    &stored.goal_id,
+                    goal_id,
                     "optimizer",
                     "optimizing",
                     "completed",

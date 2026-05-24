@@ -44,7 +44,7 @@ impl SideCarAgent for GoalSummarizerAgent {
 
         emitter.emit_agent_status(workspace_id, "summarizer", "running", "summarizing");
 
-        let history = ctx.cell.get_history();
+        let history = ctx.cell.get_lines();
 
         let system_prompt = PromptTemplate::system_prompt(&AgentType::Summarizer);
 

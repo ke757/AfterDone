@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use futures::Stream;
 
 use crate::config::LlmConfig;
-use crate::session::Message;
+use crate::session::SessionLine;
 use crate::error::{AppError, AppResult};
 use crate::llm::provider::{LLMStream, LlmProvider, StreamChunk};
 
@@ -24,7 +24,7 @@ impl LlmProvider for RigProvider {
         &self,
         system_prompt: &str,
         user_prompt: &str,
-        context: &[Message],
+        context: &[SessionLine],
     ) -> AppResult<String> {
         let full_prompt = build_prompt_from_context(context, user_prompt);
         self.call_rig(system_prompt, &full_prompt).await
@@ -34,7 +34,7 @@ impl LlmProvider for RigProvider {
         &self,
         system_prompt: &str,
         user_prompt: &str,
-        context: &[Message],
+        context: &[SessionLine],
     ) -> AppResult<LLMStream> {
         let full_prompt = build_prompt_from_context(context, user_prompt);
         let result = self.call_rig(system_prompt, &full_prompt).await?;
@@ -84,20 +84,22 @@ impl RigProvider {
     }
 }
 
-/// Build a combined prompt from message history and current user input
-fn build_prompt_from_context(context: &[Message], user_prompt: &str) -> String {
+/// Build a combined prompt from session lines (messages only, effects excluded)
+fn build_prompt_from_context(context: &[SessionLine], user_prompt: &str) -> String {
     let mut parts = Vec::new();
 
-    for msg in context {
-        let role_label = match msg.role.as_str() {
-            "user" => "User",
-            "agent_summarizer" => "Summarizer",
-            "agent_executor" => "Executor",
-            "agent_optimizer" => "Optimizer",
-            "system" => "System",
-            _ => "Assistant",
-        };
-        parts.push(format!("[{}]: {}", role_label, msg.content));
+    for line in context {
+        if let SessionLine::Message { role, content, .. } = line {
+            let role_label = match role.as_str() {
+                "user" => "User",
+                "agent_summarizer" => "Summarizer",
+                "agent_executor" => "Executor",
+                "agent_optimizer" => "Optimizer",
+                "system" => "System",
+                _ => "Assistant",
+            };
+            parts.push(format!("[{}]: {}", role_label, content));
+        }
     }
 
     parts.push(format!("[User]: {}", user_prompt));

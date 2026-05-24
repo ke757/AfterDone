@@ -1,10 +1,9 @@
 use async_trait::async_trait;
 
-use super::{HandlerContext, ResultHandler};
+use super::ResultHandler;
 use crate::agents::AgentOutput;
 use crate::db::DatabasePool;
 use crate::error::{AppError, AppResult};
-use crate::session::cell::result::{ResultStatus, StoredResult};
 use crate::workhub::{AgentType, GoalsRepo, GoalStatus};
 
 pub struct SummarizerResultHandler;
@@ -15,36 +14,24 @@ impl ResultHandler for SummarizerResultHandler {
         AgentType::Summarizer
     }
 
-    async fn handle(&self, output: AgentOutput, ctx: &HandlerContext) -> AppResult<StoredResult> {
-        let status = match &output {
-            AgentOutput::ConversationTurn { summary_draft, .. } => {
-                if summary_draft.is_some() {
-                    ResultStatus::Ready
-                } else {
-                    ResultStatus::Active
-                }
+    fn to_effect_content(&self, output: &AgentOutput) -> AppResult<serde_json::Value> {
+        match output {
+            AgentOutput::ConversationTurn { .. } | AgentOutput::GoalSummary { .. } => {
+                Ok(serde_json::to_value(output)?)
             }
-            AgentOutput::GoalSummary { .. } => ResultStatus::Ready,
-            _ => {
-                return Err(AppError::Agent(
-                    "Summarizer handler received unexpected output variant".into(),
-                ))
-            }
-        };
-
-        Ok(StoredResult::new(
-            ctx.session_id.clone(),
-            ctx.workspace_id.clone(),
-            ctx.goal_id.clone(),
-            AgentType::Summarizer,
-            serde_json::to_value(&output)?,
-            status,
-        ))
+            _ => Err(AppError::Agent(
+                "Summarizer handler received unexpected output variant".into(),
+            )),
+        }
     }
 
-    async fn persist(&self, db: &DatabasePool, stored: &StoredResult) -> AppResult<()> {
-        let output: AgentOutput = serde_json::from_value(stored.output.clone())?;
-
+    async fn persist(
+        &self,
+        db: &DatabasePool,
+        output: &AgentOutput,
+        goal_id: &str,
+        _workspace_id: &str,
+    ) -> AppResult<()> {
         match output {
             AgentOutput::GoalSummary {
                 title,
@@ -55,7 +42,7 @@ impl ResultHandler for SummarizerResultHandler {
             } => {
                 crate::services::SummarizerService::persist_summary(
                     db,
-                    &stored.goal_id,
+                    goal_id,
                     &crate::workhub::GoalSummary {
                         title: title.clone(),
                         description: description.clone(),
@@ -65,14 +52,14 @@ impl ResultHandler for SummarizerResultHandler {
                     },
                 ).await?;
 
-                GoalsRepo::update_status(db, &stored.goal_id, GoalStatus::Draft).await?;
+                GoalsRepo::update_status(db, goal_id, GoalStatus::Draft).await?;
                 crate::workhub::AgentLogsRepo::append(
                     db,
-                    &stored.goal_id,
+                    goal_id,
                     "summarizer",
                     "summarizing",
                     "completed",
-                    Some(&serde_json::to_string(&stored.output)?),
+                    Some(&serde_json::to_string(output)?),
                 ).await?;
             }
             AgentOutput::ConversationTurn { .. } => {

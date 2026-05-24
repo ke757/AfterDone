@@ -3,12 +3,12 @@
  * 管理聊天消息状态（基于 Cell）
  */
 import { create } from 'zustand';
-import type { Message } from '../types/chat';
+import type { SessionLine } from '../services/commands';
 import * as commands from '../services/commands';
 import { onChatStream, onNewMessage } from '../services/events';
 
 interface ChatState {
-  messages: Message[];
+  lines: SessionLine[];
   isStreaming: boolean;
   streamingContent: string;
   isLoading: boolean;
@@ -25,7 +25,7 @@ interface ChatState {
 }
 
 export const useChatStore = create<ChatState>((set) => ({
-  messages: [],
+  lines: [],
   isStreaming: false,
   streamingContent: '',
   isLoading: false,
@@ -35,7 +35,7 @@ export const useChatStore = create<ChatState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const resp = await commands.cellGetHistory(cellId);
-      set({ messages: resp.messages, isLoading: false });
+      set({ lines: resp.messages, isLoading: false });
     } catch (error) {
       set({ error: String(error), isLoading: false });
     }
@@ -66,7 +66,7 @@ export const useChatStore = create<ChatState>((set) => ({
   },
 
   clearMessages: () => {
-    set({ messages: [] });
+    set({ lines: [] });
   },
 
   clearError: () => {
@@ -95,7 +95,7 @@ export function initChatListeners() {
 
   onNewMessage((message) => {
     useChatStore.setState((state) => ({
-      messages: [...state.messages, message],
+      lines: [...state.lines, message as SessionLine],
     }));
   }).then((fn) => {
     unlistenMessage = fn;
