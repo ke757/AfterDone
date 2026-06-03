@@ -29,6 +29,7 @@ pub enum SessionLine {
 }
 
 impl SessionLine {
+    /// 获取该 session 行的创建时间字符串（ISO-8601 格式）
     pub fn created_at_str(&self) -> &str {
         match self {
             SessionLine::Message { created_at, .. }
@@ -36,6 +37,7 @@ impl SessionLine {
         }
     }
 
+    /// 获取该 session 行对应的 agent 类型名称
     pub fn agent_type_str(&self) -> &str {
         match self {
             SessionLine::Message { agent_type, .. }

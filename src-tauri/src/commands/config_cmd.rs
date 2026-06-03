@@ -6,8 +6,10 @@ use serde::Serialize;
 use crate::adapter::openclaw::{OpenClawClient, OpenClawConfig as GatewayConfig};
 use crate::config::{ConnectionTestResult, LlmConfig, OpenClawConfig, ResourceRepoInfo, AppInitStatus};
 use crate::error::AppResult;
-use crate::llm::LlmProvider;
-use crate::llm::RigProvider;
+use crate::llm::{
+    LlmProvider, RigProvider,
+    message::{ChatMessage, SystemMessage},
+};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -121,6 +123,7 @@ pub async fn config_set_llm(
     Ok(app_config.llm.clone())
 }
 
+/// 测试的是 OpenClaw Gateway 的连接
 #[tauri::command]
 pub async fn config_test_openclaw(
     state: State<'_, AppState>,
@@ -172,6 +175,7 @@ pub async fn config_test_openclaw(
     }
 }
 
+/// 用于测试 LLM（大语言模型）连接是否正常。
 #[tauri::command]
 pub async fn config_test_llm(
     state: State<'_, AppState>,
@@ -193,20 +197,23 @@ pub async fn config_test_llm(
     // Create provider and test with a simple completion
     let provider = RigProvider::new(llm_config);
 
-    let response = provider.complete(
-        "You are a test assistant. Reply with 'OK'.",
-        "Test connection. Reply with just 'OK'.",
-        &[],
-    ).await;
+    let system = SystemMessage {
+        content: "You are a test assistant. Reply with 'OK'.".to_string(),
+    };
+    let messages = vec![ChatMessage::user("Test connection. Reply with just 'OK'.")];
+    let response = provider.complete(&system, &messages).await;
 
     let latency = start.elapsed().as_millis() as u64;
 
     match response {
-        Ok(text) => Ok(ConnectionTestResult {
-            success: true,
-            message: format!("LLM connection successful. Response: {}", text.trim()),
-            latency_ms: Some(latency),
-        }),
+        Ok(assistant) => {
+            let text = assistant.extract_text();
+            Ok(ConnectionTestResult {
+                success: true,
+                message: format!("LLM connection successful. Response: {}", text.trim()),
+                latency_ms: Some(latency),
+            })
+        }
         Err(e) => Ok(ConnectionTestResult {
             success: false,
             message: format!("LLM connection failed: {}", e),

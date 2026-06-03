@@ -38,7 +38,24 @@ No test, lint, or format commands are configured yet.
 | `events/` | `EventBridge` pushes events to frontend via Tauri app handle |
 | `commands/` | Tauri IPC command handlers registered in `lib.rs` |
 | `state/` | `AppState` holds db pool, config, and `AgentSupervisor` |
-| `session/` | In-memory chat memory for agents |
+| `session/` | Cell-based session system: `Session` trait (message/effect lines) + `SessionCell` trait (cell identity + behavior) |
+
+## Session Architecture
+
+- **Two-layer split**: `Session` trait (pure message/effect line storage) vs `SessionCell` trait (cell identity + wraps `Box<dyn Session>`)
+- **SessionLine enum**: Unified line type with `#[serde(tag = "type")]`:
+  - `Message` — chat messages (role, content), visible to agent context
+  - `Effect` — side effects (Result, FileChange), **invisible** to agent context
+- **Effect types**:
+  - `EffectType::Result` — agent run output summary, frontend shows latest only
+  - `EffectType::FileChange` — tool call file changes, cumulative display
+- **Session implementations**:
+  - `InMemorySession` — GoalSummary uses this (temporary, not persisted)
+  - `JsonlSession` — Build/Executor/Optimizer use this (persisted to `nodes/{node_id}/cells/{cell_id}.jsonl`)
+- **Cell types**: `GoalSummaryCell`, `BuildCell`, `ExecutorCell`, `OptimizerCell` — each is a concrete struct implementing `SessionCell`
+- **CellManager**: `HashMap<cell_id, Arc<dyn SessionCell>>` + `node_id` index for listing
+- **Result**: `StoredResult` retired — reads latest `Effect::Result` line from session instead
+- **Redo**: `truncate(at_index)` — discard lines >= index, then re-append
 
 ## Agent Lifecycle
 
@@ -56,3 +73,5 @@ The `Executor` exists but is not wired in the status-to-agent mapping yet.
 - TypeScript strict mode is enabled — no unused locals or parameters allowed
 - Tauri commands follow the pattern `{domain}_{action}` (e.g., `goals_create`, `config_get_llm`)
 - The `dist/` directory and `src-tauri/target/` are gitignored; `node_modules/` is gitignored
+- Skills provide specialized instructions and workflows for specific tasks.
+Use the skill tool to load a skill when a task matches its description.

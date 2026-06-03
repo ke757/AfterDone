@@ -12,6 +12,7 @@ pub mod types;
 pub mod session;
 pub mod cell;
 pub mod manager;
+pub mod convert;
 
 pub use types::{EffectType, SessionLine};
 pub use cell::{

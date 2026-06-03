@@ -15,7 +15,11 @@ use crate::adapter::Transport;
 use crate::workhub::AgentType;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
-use crate::llm::LlmProvider;
+use crate::llm::{
+    LlmProvider,
+    message::{ChatMessage, SystemMessage},
+};
+use crate::session::convert::session_lines_to_chat_messages;
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{RuntimeContext, AgentOutput, Optimization};
 use crate::workhub::{WorkHub, TodoList, TodoItem, BugEntry};
@@ -60,14 +64,15 @@ impl OptimizerAgent {
 
         // Build analysis prompt
         let prompt = self.build_analysis_prompt(ctx, &plan, &parent_bugs, &parent_conclusion);
-        let response = llm.complete(
-            "You are an optimization agent that analyzes achieved goals.",
-            &prompt,
-            &ctx.cell.get_lines(),
-        ).await?;
+        let mut messages = session_lines_to_chat_messages(&ctx.cell.get_lines());
+        messages.push(ChatMessage::user(&prompt));
+        let system = SystemMessage {
+            content: "You are an optimization agent that analyzes achieved goals.".to_string(),
+        };
+        let response = llm.complete(&system, &messages).await?;
 
         // Parse todo list
-        let todo_list = self.parse_todo_list(&response, &parent_bugs)?;
+        let todo_list = self.parse_todo_list(&response.extract_text(), &parent_bugs)?;
 
         emitter.emit_agent_stream(
             wid,
@@ -99,11 +104,12 @@ impl OptimizerAgent {
 
         // Build and send prompt
         let spec_prompt = self.build_specification_prompt(&spec);
-        let _spec_response = llm.complete(
-            "You are an optimization agent that applies improvements.",
-            &spec_prompt,
-            &ctx.cell.get_lines(),
-        ).await?;
+        let mut messages = session_lines_to_chat_messages(&ctx.cell.get_lines());
+        messages.push(ChatMessage::user(&spec_prompt));
+        let system = SystemMessage {
+            content: "You are an optimization agent that applies improvements.".to_string(),
+        };
+        let _spec_response = llm.complete(&system, &messages).await?;
 
         emitter.emit_agent_stream(
             wid,
@@ -162,11 +168,12 @@ impl OptimizerAgent {
                 .collect::<Vec<_>>()
                 .join("\n")
         );
-        let _response = llm.complete(
-            "You are a verification agent.",
-            &verify_prompt,
-            &ctx.cell.get_lines(),
-        ).await?;
+        let mut messages = session_lines_to_chat_messages(&ctx.cell.get_lines());
+        messages.push(ChatMessage::user(&verify_prompt));
+        let system = SystemMessage {
+            content: "You are a verification agent.".to_string(),
+        };
+        let _response = llm.complete(&system, &messages).await?;
 
         Ok(VerificationResult {
             passed: true,

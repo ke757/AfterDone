@@ -6,6 +6,7 @@ pub mod executor;
 pub mod builder;
 pub mod optimizer;
 pub mod runtime;
+pub(super) mod prompt;
 
 pub use types::*;
 pub use traits::SideCarAgent;

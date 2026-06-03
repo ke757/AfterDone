@@ -2,6 +2,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
 use crate::events::types::*;
+use crate::llm::events::StreamEvent;
 
 /// Typed event bridge wrapping Tauri's AppHandle.
 /// This is the ONLY component that knows about Tauri's event system.
@@ -24,6 +25,12 @@ impl EventBridge {
             delta: delta.to_string(),
             finished,
         });
+    }
+
+    /// Send a structured StreamEvent to the frontend.
+    pub fn emit_stream_event(&self, workspace_id: &str, evt: &StreamEvent) {
+        let event = format!("ryg:agent:stream:{}", workspace_id);
+        let _ = self.app.emit(&event, evt);
     }
 
     pub fn emit_agent_status(&self, workspace_id: &str, agent_type: &str, status: &str, phase: &str) {

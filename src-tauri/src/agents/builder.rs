@@ -16,11 +16,14 @@ use crate::adapter::generator::{
     ExecuteParams, ExecuteResponse, StatusParams, StatusResponse,
     METHOD_EXECUTE, METHOD_STATUS,
 };
-use crate::session::SessionLine;
 use crate::workhub::AgentType;
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
-use crate::llm::LlmProvider;
+use crate::llm::{
+    LlmProvider,
+    message::{ChatMessage, SystemMessage},
+};
+use crate::session::convert::session_lines_to_chat_messages;
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{RuntimeContext, AgentOutput};
 use crate::workhub::{
@@ -66,14 +69,15 @@ impl BuilderAgent {
         // Analyze the goal
         let prompt = self.build_analysis_prompt(ctx, &existing_conclusion);
         let history = ctx.cell.get_lines();
-        let response = llm.complete(
-            "You are a goal planning agent that creates detailed plans.",
-            &prompt,
-            &history,
-        ).await?;
+        let mut messages = session_lines_to_chat_messages(&history);
+        messages.push(ChatMessage::user(&prompt));
+        let system = SystemMessage {
+            content: "You are a goal planning agent that creates detailed plans.".to_string(),
+        };
+        let response = llm.complete(&system, &messages).await?;
 
         // Parse the plan
-        let plan = self.parse_plan(&response)?;
+        let plan = self.parse_plan(&response.extract_text())?;
 
         emitter.emit_agent_stream(
             wid,
@@ -241,7 +245,7 @@ impl BuilderAgent {
         &self,
         result: &GeneratorTaskResult,
         llm: &Arc<dyn LlmProvider>,
-        history: &[SessionLine],
+        history: &[crate::session::SessionLine],
     ) -> AppResult<GeneratorTaskResult> {
         if !result.success {
             return Ok(result.clone());
@@ -253,11 +257,12 @@ impl BuilderAgent {
                 "Review and improve this user manual. Make it clearer and more actionable:\n\n{}",
                 manual
             );
-            let _response = llm.complete(
-                "You are a technical writer specializing in user documentation.",
-                &prompt,
-                history,
-            ).await?;
+            let mut messages = session_lines_to_chat_messages(history);
+            messages.push(ChatMessage::user(&prompt));
+            let system = SystemMessage {
+                content: "You are a technical writer specializing in user documentation.".to_string(),
+            };
+            let _response = llm.complete(&system, &messages).await?;
             // For now, keep original manual
             // In production, could use LLM response to enhance
         }
@@ -310,11 +315,12 @@ impl BuilderAgent {
             "Verify the following output from a generator agent. Is it complete and correct?\n\n{}",
             generator_result.result
         );
-        let _response = llm.complete(
-            "You are a verification agent.",
-            &verify_prompt,
-            &ctx.cell.get_lines(),
-        ).await?;
+        let mut messages = session_lines_to_chat_messages(&ctx.cell.get_lines());
+        messages.push(ChatMessage::user(&verify_prompt));
+        let system = SystemMessage {
+            content: "You are a verification agent.".to_string(),
+        };
+        let _response = llm.complete(&system, &messages).await?;
 
         Ok(VerificationResult {
             passed: true,

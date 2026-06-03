@@ -1,13 +1,21 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 
+use futures::StreamExt;
+
 use crate::agents::traits::SideCarAgent;
 use crate::agents::types::{AgentOutput, RuntimeContext};
 use crate::adapter::Transport;
 use crate::workhub::{AgentType, GoalSummary};
 use crate::error::{AppError, AppResult};
 use crate::events::EventBridge;
-use crate::llm::{LlmProvider, PromptTemplate};
+use crate::llm::{
+    LlmProvider,
+    message::{ChatMessage, SystemMessage},
+    stream::{StreamEventStream, EventBridgeStreamSink, StreamSink},
+};
+use crate::session::convert::session_lines_to_chat_messages;
+use super::prompt::PromptTemplate;
 
 /// Goal Summarization Agent — 对话式产品分析师
 ///
@@ -44,9 +52,9 @@ impl SideCarAgent for GoalSummarizerAgent {
 
         emitter.emit_agent_status(workspace_id, "summarizer", "running", "summarizing");
 
-        let history = ctx.cell.get_lines();
-
-        let system_prompt = PromptTemplate::system_prompt(&AgentType::Summarizer);
+        let system = SystemMessage {
+            content: PromptTemplate::system_prompt(&AgentType::Summarizer).to_string(),
+        };
 
         // 构造 user prompt：包含目标标题作为上下文
         let user_prompt = format!(
@@ -57,55 +65,53 @@ impl SideCarAgent for GoalSummarizerAgent {
             ctx.goal.title
         );
 
-        // LLM 流式调用
-        let mut stream = llm.stream(system_prompt, &user_prompt, &history).await?;
+        let history = ctx.cell.get_lines();
+        let mut messages = session_lines_to_chat_messages(&history);
+        messages.push(ChatMessage::user(&user_prompt));
+
+        let mut stream: StreamEventStream = llm.stream(&system, &messages).await?;
+        let sink = EventBridgeStreamSink::new(emitter.clone(), workspace_id);
         let mut full_response = String::new();
 
-        use futures::StreamExt;
-        while let Some(chunk) = stream.next().await {
+        while let Some(event) = stream.next().await {
             if self.cancel_token.is_cancelled() {
                 emitter.emit_agent_status(workspace_id, "summarizer", "canceled", "summarizing");
                 ctx.cell.clear().await;
-                return Err(AppError::Agent("Summarizer was canceled".to_string()));
+                return Err(AppError::Agent(
+                    "Summarizer was canceled".to_string(),
+                ));
             }
 
-            match chunk {
-                Ok(chunk) => {
-                    if !chunk.delta.is_empty() {
-                        emitter.emit_agent_stream(workspace_id, &chunk.delta, false);
-                        full_response.push_str(&chunk.delta);
-                    }
-                    if chunk.finished {
-                        emitter.emit_agent_stream(workspace_id, "", true);
-                    }
-                }
-                Err(e) => {
-                    emitter.emit_agent_status(workspace_id, "summarizer", "error", "summarizing");
-                    return Err(e);
-                }
+            let event = event?;
+
+            // Accumulate text for session persistence
+            if let crate::llm::events::StreamEvent::ContentBlockDelta {
+                delta: crate::llm::events::ContentDelta::Text(ref text),
+                ..
+            } = &event
+            {
+                full_response.push_str(text);
             }
+
+            sink.feed(event).await?;
         }
 
         // 记录 assistant 响应到 session
         ctx.cell.add_message("assistant", &full_response).await;
-
-        // 尝试解析 GoalSummary
         let summary_draft = try_parse_goal_summary(&full_response);
 
         emitter.emit_agent_status(workspace_id, "summarizer", "completed", "summarizing");
 
-        let message = full_response;
         let has_summary = summary_draft.is_some();
-
         emitter.emit_agent_decision(
             workspace_id,
             if has_summary { "summary_ready" } else { "conversation_turn" },
-            &message,
+            &full_response,
             summary_draft.as_ref().and_then(|s| serde_json::to_value(s).ok()),
         );
 
         Ok(AgentOutput::ConversationTurn {
-            message,
+            message: full_response,
             summary_draft,
         })
     }
@@ -120,7 +126,6 @@ impl SideCarAgent for GoalSummarizerAgent {
 /// 如果能解析出完整的 JSON → 返回 Some；否则返回 None（说明这是一条普通对话消息）。
 fn try_parse_goal_summary(response: &str) -> Option<GoalSummary> {
     let json_str = extract_json(response);
-
     serde_json::from_str::<GoalSummary>(&json_str).ok()
 }
 
